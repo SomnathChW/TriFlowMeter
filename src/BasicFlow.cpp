@@ -1,3 +1,7 @@
+// TriFlowMeter - High-Performance Network Flow Analyzer
+// Copyright (C) 2026 | Licensed under GPL-3.0
+// See LICENSE file or visit https://www.gnu.org/licenses/gpl-3.0.html
+
 #include "BasicFlow.h"
 
 #include <algorithm>
