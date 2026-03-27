@@ -131,6 +131,8 @@ int main(int argc, char* argv[]) {
     } else {
         std::cout << "Reading pcap file: " << capture_source << std::endl;
 
+        LiveDashboard dashboard(capture_source, csv_path);
+
         live_out.open(csv_path.c_str(), std::ios::out | std::ios::trunc);
         if (!live_out.is_open()) {
             std::cerr << "Error opening CSV output: " << csv_path << std::endl;
@@ -142,17 +144,38 @@ int main(int argc, char* argv[]) {
         live_out.flush();
 
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&live_out, &streamed_rows](const BasicFlow& flow) {
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen](const BasicFlow& flow) {
             if (CSVWriter::writeFlowRow(live_out, flow)) {
                 streamed_rows++;
                 live_out.flush();
+                dashboard.setWrittenFlows(streamed_rows);
+                dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+                dashboard.refreshIfDue();
             }
         });
 
-        if (!reader.readAll(flow_gen, stats, true, false, nullptr, nullptr)) {
+        dashboard.forceRefresh();
+
+        if (!reader.readAll(
+                flow_gen,
+                stats,
+                true,
+                false,
+                nullptr,
+                [&dashboard, &flow_gen](const PacketStats& s) {
+                    dashboard.setPacketStats(s);
+                    dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+                    dashboard.refreshIfDue();
+                })) {
             std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
             return 1;
         }
+
+        dashboard.setPacketStats(stats);
+        dashboard.setWrittenFlows(streamed_rows);
+        dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+        dashboard.forceRefresh();
+        dashboard.finalize();
     }
 
     flow_gen.finishAllFlows();
