@@ -11,7 +11,8 @@ uint64_t toMicros(uint32_t sec, uint32_t usec) {
 
 }  // namespace
 
-BasicFlow::BasicFlow(const BasicPacketInfo& pkt) {
+BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout_micros_value) {
+    activity_timeout_micros = activity_timeout_micros_value;
     flow_id = pkt.fwdFlowId();
     src_ip = pkt.src_ip;
     dst_ip = pkt.dst_ip;
@@ -74,7 +75,9 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
                      const std::string& old_src_ip,
                      const std::string& old_dst_ip,
                      uint16_t old_src_port,
-                     uint16_t old_dst_port) {
+                     uint16_t old_dst_port,
+                     uint64_t activity_timeout_micros_value) {
+    activity_timeout_micros = activity_timeout_micros_value;
     flow_id = pkt.fwdFlowId();
     src_ip = old_src_ip;
     dst_ip = old_dst_ip;
@@ -146,7 +149,7 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
 
     const uint64_t current_timestamp = packetTimeMicros(pkt);
     const uint64_t previous_flow_last_seen = flow_last_seen;
-    updateActiveIdleTime(current_timestamp, 5000000ULL);
+    updateActiveIdleTime(current_timestamp, activity_timeout_micros);
 
     const bool is_forward = (src_ip == pkt.src_ip);
     flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
@@ -244,7 +247,7 @@ void BasicFlow::detectUpdateSubflows(const BasicPacketInfo& pkt) {
     }
     if (((ts - sf_last_packet_ts) / 1000000.0) > 1.0) {
         sf_count++;
-        updateActiveIdleTime(ts, 5000000ULL);
+        updateActiveIdleTime(ts, activity_timeout_micros);
         sf_ac_helper = ts;
     }
     sf_last_packet_ts = ts;

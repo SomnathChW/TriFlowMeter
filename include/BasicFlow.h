@@ -56,6 +56,8 @@ struct RunningStats {
 
 class BasicFlow {
 public:
+    static constexpr uint64_t kDefaultActivityTimeoutMicros = 5000000ULL;
+
     std::string flow_id;
     std::string src_ip;
     std::string dst_ip;
@@ -129,14 +131,17 @@ public:
     int fwd_fin_flags = 0;
     int bwd_fin_flags = 0;
     bool finished = false;
+    uint64_t activity_timeout_micros = kDefaultActivityTimeoutMicros;
 
     BasicFlow() = default;
-    explicit BasicFlow(const BasicPacketInfo& pkt);
+    explicit BasicFlow(const BasicPacketInfo& pkt,
+                       uint64_t activity_timeout_micros = kDefaultActivityTimeoutMicros);
     BasicFlow(const BasicPacketInfo& pkt,
               const std::string& old_src_ip,
               const std::string& old_dst_ip,
               uint16_t old_src_port,
-              uint16_t old_dst_port);
+              uint16_t old_dst_port,
+              uint64_t activity_timeout_micros = kDefaultActivityTimeoutMicros);
 
     void addPacket(const BasicPacketInfo& pkt);
     void updateActiveIdleTime(uint64_t current_time, uint64_t threshold);

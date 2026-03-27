@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <fstream>
 #include <csignal>
+#include <optional>
 
 #include "FlowGenerator.h"
 #include "CSVWriter.h"
@@ -81,43 +82,95 @@ std::string resolveCsvPath(const std::string& capture_source,
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
+    auto printUsage = [&argv]() {
         std::cerr << "Usage:\n"
-                  << "  " << argv[0] << " <pcap_file> [output_path_or_directory]\n"
-                  << "  " << argv[0] << " --live <interface> [output_path_or_directory]"
-                  << std::endl;
+                  << "  " << argv[0] << " <pcap_file> [output_path_or_directory] [options]\n"
+                  << "  " << argv[0] << " --live <interface> [output_path_or_directory] [options]\n"
+                  << "Options:\n"
+                  << "  --flow-timeout <sec>      Flow timeout in seconds (default: 120)\n"
+                  << "  --activity-timeout <sec>  Activity timeout in seconds (default: 5)\n"
+                  << "  -h, --help                Show this help" << std::endl;
+    };
+
+    if (argc < 2) {
+        printUsage();
         return 1;
     }
 
     bool live_mode = false;
-    std::string capture_source;
+    uint64_t flow_timeout_sec = 120;
+    uint64_t activity_timeout_sec = 5;
+    std::optional<std::string> capture_source_opt;
+    std::optional<std::string> output_arg_opt;
 
-    std::string output_arg_value;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help") {
+            printUsage();
+            return 0;
+        }
+
+        if (arg == "--live") {
+            if (live_mode) {
+                std::cerr << "Error: --live specified more than once." << std::endl;
+                printUsage();
+                return 1;
+            }
+            live_mode = true;
+            continue;
+        }
+
+        if (arg == "--flow-timeout") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --flow-timeout requires a value in seconds." << std::endl;
+                printUsage();
+                return 1;
+            }
+            try {
+                flow_timeout_sec = std::stoull(argv[++i]);
+            } catch (...) {
+                std::cerr << "Error: --flow-timeout must be a non-negative integer." << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (arg == "--activity-timeout") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --activity-timeout requires a value in seconds." << std::endl;
+                printUsage();
+                return 1;
+            }
+            try {
+                activity_timeout_sec = std::stoull(argv[++i]);
+            } catch (...) {
+                std::cerr << "Error: --activity-timeout must be a non-negative integer." << std::endl;
+                return 1;
+            }
+            continue;
+        }
+
+        if (!capture_source_opt.has_value()) {
+            capture_source_opt = arg;
+        } else if (!output_arg_opt.has_value()) {
+            output_arg_opt = arg;
+        } else {
+            std::cerr << "Error: Unexpected argument: " << arg << std::endl;
+            printUsage();
+            return 1;
+        }
+    }
+
+    if (!capture_source_opt.has_value()) {
+        std::cerr << "Error: Missing capture source." << std::endl;
+        printUsage();
+        return 1;
+    }
+
+    const std::string capture_source = *capture_source_opt;
     const std::string* output_arg = nullptr;
-
-    if (std::string(argv[1]) == "--live") {
-        if (argc < 3 || argc > 4) {
-            std::cerr << "Usage: " << argv[0]
-                      << " --live <interface> [output_path_or_directory]" << std::endl;
-            return 1;
-        }
-
-        live_mode = true;
-        capture_source = argv[2];
-        if (argc == 4) {
-            output_arg_value = argv[3];
-            output_arg = &output_arg_value;
-        }
-    } else {
-        if (argc > 3) {
-            std::cerr << "Usage: " << argv[0] << " <pcap_file> [output_path_or_directory]" << std::endl;
-            return 1;
-        }
-        capture_source = argv[1];
-        if (argc == 3) {
-            output_arg_value = argv[2];
-            output_arg = &output_arg_value;
-        }
+    if (output_arg_opt.has_value()) {
+        output_arg = &(*output_arg_opt);
     }
 
     PacketReader reader = live_mode
@@ -142,7 +195,7 @@ int main(int argc, char* argv[]) {
     }
 
     PacketStats stats;
-    FlowGenerator flow_gen(120);
+    FlowGenerator flow_gen(flow_timeout_sec, activity_timeout_sec);
     std::uint64_t streamed_rows = 0;
 
     const std::string csv_path = resolveCsvPath(capture_source, output_arg, !live_mode);

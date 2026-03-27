@@ -29,8 +29,9 @@ std::size_t javaHashMapCapacityForPeakSize(std::size_t peak_size) {
 
 }  // namespace
 
-FlowGenerator::FlowGenerator(uint64_t timeout_sec) {
+FlowGenerator::FlowGenerator(uint64_t timeout_sec, uint64_t activity_timeout_sec) {
     flow_timeout_ = timeout_sec * 1000000;
+    activity_timeout_micros_ = activity_timeout_sec * 1000000;
     store_finished_flows_ = true;
     finished_flow_count_ = 0;
     next_insertion_order_ = 0;
@@ -74,7 +75,7 @@ void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
                 handleFinishedFlow(flow);
             }
             current_flows_.erase(flow_id);
-            ActiveFlowEntry entry{BasicFlow(pkt, flow.src_ip, flow.dst_ip, flow.src_port, flow.dst_port), next_insertion_order_++};
+            ActiveFlowEntry entry{BasicFlow(pkt, flow.src_ip, flow.dst_ip, flow.src_port, flow.dst_port, activity_timeout_micros_), next_insertion_order_++};
             entry.flow.flow_id = flow_id;
             current_flows_.emplace(flow_id, std::move(entry));
             peak_current_flows_ = std::max(peak_current_flows_, current_flows_.size());
@@ -86,7 +87,7 @@ void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
             }
         }
     } else {
-        ActiveFlowEntry entry{BasicFlow(pkt), next_insertion_order_++};
+        ActiveFlowEntry entry{BasicFlow(pkt, activity_timeout_micros_), next_insertion_order_++};
         entry.flow.flow_id = fwd_id;
         current_flows_.emplace(fwd_id, std::move(entry));
         peak_current_flows_ = std::max(peak_current_flows_, current_flows_.size());

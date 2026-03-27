@@ -22,13 +22,15 @@ private:
     bool store_finished_flows_;
     int finished_flow_count_;
     uint64_t flow_timeout_;
+    uint64_t activity_timeout_micros_;
     uint64_t next_insertion_order_;
     std::size_t peak_current_flows_;
 
     void handleFinishedFlow(const BasicFlow& flow);
 
 public:
-    explicit FlowGenerator(uint64_t timeout_sec = 120);
+    explicit FlowGenerator(uint64_t timeout_sec = 120,
+                           uint64_t activity_timeout_sec = 5);
 
     void addPacket(const BasicPacketInfo& pkt);
     void finishAllFlows();
