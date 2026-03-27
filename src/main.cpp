@@ -1,33 +1,46 @@
 #include <iostream>
 #include <filesystem>
 #include <string>
+#include <cstdint>
+#include <fstream>
+#include <csignal>
 
 #include "FlowGenerator.h"
-#include "InsertCsvRow.h"
+#include "CSVWriter.h"
 #include "PacketReader.h"
+#include "STDWriter.h"
 
 namespace {
 
 namespace fs = std::filesystem;
 
-std::string deriveCsvPath(const std::string& pcap_path) {
-    std::string base = pcap_path;
-    const std::string::size_type slash_pos = base.find_last_of("/\\");
-    if (slash_pos != std::string::npos) {
-        base = base.substr(slash_pos + 1);
-    }
+volatile std::sig_atomic_t g_stop_capture = 0;
 
-    const std::string::size_type dot_pos = base.find_last_of('.');
-    if (dot_pos != std::string::npos) {
-        base = base.substr(0, dot_pos);
-    }
-
-    return base + "_Flow.csv";
+void handleSignal(int) {
+    g_stop_capture = 1;
 }
 
-std::string deriveCsvPathInDirectory(const std::string& pcap_path, const std::string& directory) {
-    const fs::path pcap_fs_path(pcap_path);
-    const std::string stem = pcap_fs_path.stem().string();
+std::string stemFromCaptureSource(const std::string& source) {
+    const fs::path p(source);
+    std::string stem = p.stem().string();
+    if (stem.empty()) {
+        stem = p.filename().string();
+    }
+    if (stem.empty()) {
+        stem = "capture";
+    }
+    return stem;
+}
+
+std::string deriveLegacyOfflineCsvPath(const std::string& source) {
+    return stemFromCaptureSource(source) + "_Flow.csv";
+}
+
+std::string deriveModernCsvPathFromStem(const std::string& stem) {
+    return stem + "_flows.csv";
+}
+
+std::string deriveCsvPathInDirectory(const std::string& stem, const std::string& directory) {
     fs::path out_dir(directory);
 
     if (!out_dir.empty()) {
@@ -38,9 +51,16 @@ std::string deriveCsvPathInDirectory(const std::string& pcap_path, const std::st
     return out_file.string();
 }
 
-std::string resolveCsvPath(const std::string& pcap_path, const std::string* output_arg) {
+std::string resolveCsvPath(const std::string& capture_source,
+                           const std::string* output_arg,
+                           bool use_legacy_offline_default) {
+    const std::string stem = stemFromCaptureSource(capture_source);
+
     if (output_arg == nullptr) {
-        return deriveCsvPath(pcap_path);
+        if (use_legacy_offline_default) {
+            return deriveLegacyOfflineCsvPath(capture_source);
+        }
+        return deriveModernCsvPathFromStem(stem);
     }
 
     const fs::path out_path(*output_arg);
@@ -49,7 +69,7 @@ std::string resolveCsvPath(const std::string& pcap_path, const std::string* outp
         (out_raw.back() == '/' || out_raw.back() == '\\');
 
     if (trailing_separator || (fs::exists(out_path) && fs::is_directory(out_path))) {
-        return deriveCsvPathInDirectory(pcap_path, out_raw);
+        return deriveCsvPathInDirectory(stem, out_raw);
     }
 
     if (out_path.has_parent_path()) {
@@ -61,37 +81,135 @@ std::string resolveCsvPath(const std::string& pcap_path, const std::string* outp
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    if (argc < 2 || argc > 3) {
-        std::cerr << "Usage: " << argv[0] << " <pcap_file> [output_path_or_directory]" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Usage:\n"
+                  << "  " << argv[0] << " <pcap_file> [output_path_or_directory]\n"
+                  << "  " << argv[0] << " --live <interface> [output_path_or_directory]"
+                  << std::endl;
         return 1;
     }
 
-    const std::string pcap_file = argv[1];
+    bool live_mode = false;
+    std::string capture_source;
+
     std::string output_arg_value;
     const std::string* output_arg = nullptr;
-    if (argc == 3) {
-        output_arg_value = argv[2];
-        output_arg = &output_arg_value;
+
+    if (std::string(argv[1]) == "--live") {
+        if (argc < 3 || argc > 4) {
+            std::cerr << "Usage: " << argv[0]
+                      << " --live <interface> [output_path_or_directory]" << std::endl;
+            return 1;
+        }
+
+        live_mode = true;
+        capture_source = argv[2];
+        if (argc == 4) {
+            output_arg_value = argv[3];
+            output_arg = &output_arg_value;
+        }
+    } else {
+        if (argc > 3) {
+            std::cerr << "Usage: " << argv[0] << " <pcap_file> [output_path_or_directory]" << std::endl;
+            return 1;
+        }
+        capture_source = argv[1];
+        if (argc == 3) {
+            output_arg_value = argv[2];
+            output_arg = &output_arg_value;
+        }
     }
-    PacketReader reader(pcap_file);
+
+    PacketReader reader = live_mode
+        ? PacketReader(PacketReader::Mode::Live, capture_source, 65535, true, 1000)
+        : PacketReader(capture_source);
+
+    if (live_mode) {
+        std::signal(SIGINT, handleSignal);
+        std::signal(SIGTERM, handleSignal);
+    }
+
     if (!reader.open()) {
-        std::cerr << "Error opening pcap file: " << reader.getLastError() << std::endl;
+        std::cerr << "Error opening capture source: " << reader.getLastError() << std::endl;
         return 1;
     }
 
-    std::cout << "Reading pcap file: " << pcap_file << std::endl;
+    if (live_mode) {
+        std::cout << "Capturing live on interface: " << capture_source
+                  << " (continuous streaming mode)" << std::endl;
+    } else {
+        std::cout << "Reading pcap file: " << capture_source << std::endl;
+    }
 
     PacketStats stats;
     FlowGenerator flow_gen(120);
-    if (!reader.readAll(flow_gen, stats, true, false)) {
-        std::cerr << "Error reading pcap file: " << reader.getLastError() << std::endl;
-        return 1;
+    std::uint64_t streamed_rows = 0;
+
+    const std::string csv_path = resolveCsvPath(capture_source, output_arg, !live_mode);
+
+    std::ofstream live_out;
+    if (live_mode) {
+        PacketStats live_stats_snapshot;
+        STDWriter dashboard("Interface", capture_source, csv_path);
+
+        live_out.open(csv_path.c_str(), std::ios::out | std::ios::trunc);
+        if (!live_out.is_open()) {
+            std::cerr << "Error opening CSV output: " << csv_path << std::endl;
+            return 1;
+        }
+
+        CSVWriter::writeHeader(live_out);
+        live_out.flush();
+        flow_gen.setStoreFinishedFlows(false);
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen](const BasicFlow& flow) {
+            if (CSVWriter::writeFlowRow(live_out, flow)) {
+                streamed_rows++;
+                live_out.flush();
+                dashboard.setWrittenFlows(streamed_rows);
+                dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+                dashboard.refreshIfDue();
+            }
+        });
+
+        dashboard.forceRefresh();
+
+        if (!reader.readAll(
+                flow_gen,
+                stats,
+                true,
+                false,
+                live_mode ? &g_stop_capture : nullptr,
+                [&live_stats_snapshot, &dashboard, &flow_gen](const PacketStats& s) {
+                    live_stats_snapshot = s;
+                    dashboard.setPacketStats(live_stats_snapshot);
+                    dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+                    dashboard.refreshIfDue();
+                })) {
+            std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
+            return 1;
+        }
+
+        dashboard.setPacketStats(stats);
+        dashboard.setWrittenFlows(streamed_rows);
+        dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
+        dashboard.forceRefresh();
+        dashboard.finalize();
+    } else {
+        if (!reader.readAll(flow_gen, stats, true, false, nullptr, nullptr)) {
+            std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
+            return 1;
+        }
     }
 
     flow_gen.finishAllFlows();
 
-    const std::string csv_path = resolveCsvPath(pcap_file, output_arg);
-    const int csv_rows = InsertCsvRow::writeBasicFlowFeatures(csv_path, flow_gen.getFinishedFlows());
+    int csv_rows = -1;
+    if (live_mode) {
+        live_out.flush();
+        csv_rows = static_cast<int>(streamed_rows);
+    } else {
+        csv_rows = CSVWriter::writeBasicFlowFeatures(csv_path, flow_gen.getFinishedFlows());
+    }
 
     std::cout << "\n=== Packet Statistics ===" << std::endl;
     std::cout << "Total packets:     " << stats.total << std::endl;

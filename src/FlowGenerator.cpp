@@ -31,8 +31,20 @@ std::size_t javaHashMapCapacityForPeakSize(std::size_t peak_size) {
 
 FlowGenerator::FlowGenerator(uint64_t timeout_sec) {
     flow_timeout_ = timeout_sec * 1000000;
+    store_finished_flows_ = true;
+    finished_flow_count_ = 0;
     next_insertion_order_ = 0;
     peak_current_flows_ = 0;
+}
+
+void FlowGenerator::handleFinishedFlow(const BasicFlow& flow) {
+    finished_flow_count_++;
+    if (store_finished_flows_) {
+        finished_flows_.push_back(flow);
+    }
+    if (flow_callback_) {
+        flow_callback_(flow);
+    }
 }
 
 void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
@@ -59,7 +71,7 @@ void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
 
         if ((pkt_time - flow_start) > flow_timeout_) {
             if (flow.packetCount() > 1) {
-                finished_flows_.push_back(flow);
+                handleFinishedFlow(flow);
             }
             current_flows_.erase(flow_id);
             ActiveFlowEntry entry{BasicFlow(pkt, flow.src_ip, flow.dst_ip, flow.src_port, flow.dst_port), next_insertion_order_++};
@@ -69,7 +81,7 @@ void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
         } else {
             flow.addPacket(pkt);
             if (flow.finished) {
-                finished_flows_.push_back(flow);
+                handleFinishedFlow(flow);
                 current_flows_.erase(flow_id);
             }
         }
@@ -113,7 +125,7 @@ void FlowGenerator::finishAllFlows() {
     });
 
     for (const auto& item : pending) {
-        finished_flows_.push_back(*item.flow);
+        handleFinishedFlow(*item.flow);
     }
 
     current_flows_.clear();
@@ -123,8 +135,19 @@ const std::vector<BasicFlow>& FlowGenerator::getFinishedFlows() const {
     return finished_flows_;
 }
 
+void FlowGenerator::setFlowCallback(std::function<void(const BasicFlow&)> callback) {
+    flow_callback_ = std::move(callback);
+}
+
+void FlowGenerator::setStoreFinishedFlows(bool store_finished_flows) {
+    store_finished_flows_ = store_finished_flows;
+    if (!store_finished_flows_) {
+        finished_flows_.clear();
+    }
+}
+
 int FlowGenerator::getFlowCount() const {
-    return static_cast<int>(finished_flows_.size());
+    return finished_flow_count_;
 }
 
 int FlowGenerator::getCurrentFlowCount() const {
