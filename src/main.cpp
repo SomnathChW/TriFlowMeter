@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <fstream>
 #include <csignal>
+#include <chrono>
 
 #include "CLIOptions.h"
 #include "FlowGenerator.h"
@@ -95,14 +96,22 @@ int main(int argc, char* argv[]) {
 
         CSVWriter::writeHeader(live_out);
         live_out.flush();
+        auto last_ui_tick = std::chrono::steady_clock::now();
+        auto tickUi = [&](bool force) {
+            const auto now = std::chrono::steady_clock::now();
+            if (force || (now - last_ui_tick >= std::chrono::milliseconds(250))) {
+                live_out.flush();
+                dashboard.forceRefresh();
+                last_ui_tick = now;
+            }
+        };
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen](const BasicFlow& flow) {
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi](const BasicFlow& flow) {
             if (CSVWriter::writeFlowRow(live_out, flow)) {
                 streamed_rows++;
-                live_out.flush();
                 dashboard.setWrittenFlows(streamed_rows);
                 dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-                dashboard.refreshIfDue();
+                tickUi(false);
             }
         });
 
@@ -114,10 +123,10 @@ int main(int argc, char* argv[]) {
                 true,
                 false,
                 opts.live_mode ? &g_stop_capture : nullptr,
-                [&dashboard, &flow_gen](const PacketStats& s) {
+                [&dashboard, &flow_gen, &tickUi](const PacketStats& s) {
                     dashboard.setPacketStats(s);
                     dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-                    dashboard.refreshIfDue();
+                    tickUi(false);
                 })) {
             std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
             return 1;
@@ -126,7 +135,7 @@ int main(int argc, char* argv[]) {
         dashboard.setPacketStats(stats);
         dashboard.setWrittenFlows(streamed_rows);
         dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-        dashboard.forceRefresh();
+        tickUi(true);
         dashboard.finalize();
     } else {
         std::cout << "Reading pcap file: " << capture_source << std::endl;
@@ -142,15 +151,23 @@ int main(int argc, char* argv[]) {
 
         CSVWriter::writeHeader(live_out);
         live_out.flush();
+        auto last_ui_tick = std::chrono::steady_clock::now();
+        auto tickUi = [&](bool force) {
+            const auto now = std::chrono::steady_clock::now();
+            if (force || (now - last_ui_tick >= std::chrono::milliseconds(250))) {
+                live_out.flush();
+                dashboard.forceRefresh();
+                last_ui_tick = now;
+            }
+        };
 
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen](const BasicFlow& flow) {
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi](const BasicFlow& flow) {
             if (CSVWriter::writeFlowRow(live_out, flow)) {
                 streamed_rows++;
-                live_out.flush();
                 dashboard.setWrittenFlows(streamed_rows);
                 dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-                dashboard.refreshIfDue();
+                tickUi(false);
             }
         });
 
@@ -162,10 +179,10 @@ int main(int argc, char* argv[]) {
                 true,
                 false,
                 nullptr,
-                [&dashboard, &flow_gen](const PacketStats& s) {
+                [&dashboard, &flow_gen, &tickUi](const PacketStats& s) {
                     dashboard.setPacketStats(s);
                     dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-                    dashboard.refreshIfDue();
+                    tickUi(false);
                 })) {
             std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
             return 1;
@@ -174,7 +191,7 @@ int main(int argc, char* argv[]) {
         dashboard.setPacketStats(stats);
         dashboard.setWrittenFlows(streamed_rows);
         dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
-        dashboard.forceRefresh();
+        tickUi(true);
         dashboard.finalize();
     }
 

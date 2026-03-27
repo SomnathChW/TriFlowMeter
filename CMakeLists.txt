@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+option(TRIFLOWMETER_ENABLE_NATIVE_OPT "Enable CPU-specific optimizations (-march=native)" ON)
+
 add_executable(triflowmeter
     src/main.cpp
     src/CLIOptions.cpp
@@ -18,6 +24,16 @@ add_executable(triflowmeter
     src/STDOutWriter.cpp
     src/FileUtils.cpp
 )
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(triflowmeter PRIVATE
+        $<$<CONFIG:Release>:-O3 -DNDEBUG>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${TRIFLOWMETER_ENABLE_NATIVE_OPT}>>:-march=native>
+    )
+    target_link_options(triflowmeter PRIVATE
+        $<$<CONFIG:Release>:-flto>
+    )
+endif()
 
 target_include_directories(triflowmeter PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

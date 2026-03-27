@@ -70,7 +70,7 @@ void LiveDashboard::setActiveFlows(std::uint64_t flows) {
 
 void LiveDashboard::refreshIfDue() {
     const auto now = std::chrono::steady_clock::now();
-    if (now - last_refresh_time_ >= std::chrono::seconds(1)) {
+    if (now - last_refresh_time_ >= std::chrono::milliseconds(250)) {
         render();
         last_refresh_time_ = now;
     }

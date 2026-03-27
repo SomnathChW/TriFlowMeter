@@ -2,6 +2,8 @@
 
 #include "PacketDecoders.h"
 
+#include <chrono>
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -97,9 +99,21 @@ bool PacketReader::readAll(FlowGenerator& flow_gen,
 
     struct pcap_pkthdr* header;
     const u_char* packet;
+    auto last_progress_cb = std::chrono::steady_clock::now();
+    auto emitProgressIfDue = [&](bool force) {
+        if (!packet_progress_cb) {
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (force || (now - last_progress_cb >= std::chrono::milliseconds(250))) {
+            packet_progress_cb(stats);
+            last_progress_cb = now;
+        }
+    };
 
     while (true) {
         if (stop_flag != nullptr && *stop_flag) {
+            emitProgressIfDue(true);
             break;
         }
 
@@ -108,12 +122,11 @@ bool PacketReader::readAll(FlowGenerator& flow_gen,
             // continue with packet decode below
         } else if (rc == 0) {
             // Live timeout tick.
-            if (packet_progress_cb) {
-                packet_progress_cb(stats);
-            }
+            emitProgressIfDue(false);
             continue;
         } else if (rc == -2) {
             // EOF (offline capture finished)
+            emitProgressIfDue(true);
             break;
         } else {
             last_error_ = pcap_geterr(handle_);
@@ -165,9 +178,7 @@ bool PacketReader::readAll(FlowGenerator& flow_gen,
             stats.discarded++;
         }
 
-        if (packet_progress_cb) {
-            packet_progress_cb(stats);
-        }
+        emitProgressIfDue(false);
     }
 
     return true;

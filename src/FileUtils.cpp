@@ -16,7 +16,9 @@ void fixOwnershipIfSudo(const std::string& path, bool is_directory) {
             uid_t uid = std::stoi(sudo_uid_str);
             gid_t gid = std::stoi(sudo_gid_str);
             
-            chown(path.c_str(), uid, gid);
+            if (chown(path.c_str(), uid, gid) != 0) {
+                // Best effort only; continue even if ownership update fails.
+            }
             
             if (is_directory) {
                 // Directory: drwxr-xr-x (755)
