@@ -126,7 +126,7 @@ public:
     RunningStats flow_idle;
 
     uint64_t sf_last_packet_ts = static_cast<uint64_t>(-1);
-    int sf_count = 0;
+    int sf_count = 1;
     uint64_t sf_ac_helper = static_cast<uint64_t>(-1);
 
     uint64_t fbulk_duration = 0;

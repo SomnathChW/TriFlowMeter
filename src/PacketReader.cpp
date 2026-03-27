@@ -169,8 +169,8 @@ bool PacketReader::readAll(FlowGenerator& flow_gen,
 
         // Java PacketReader falls back to VPN/L2TP parsing when direct IP parse fails.
         if (!valid) {
-            valid = packetdecode::decodeL2TP(ip_packet, remaining_len);
-            if (valid) {
+            const bool is_vpn = packetdecode::decodeL2TP(ip_packet, remaining_len);
+            if (is_vpn) {
                 stats.vpn_packets++;
             }
         }

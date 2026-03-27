@@ -100,7 +100,7 @@ void FlowGenerator::addPacket(const BasicPacketInfo& pkt) {
             const uint16_t old_src_port = flow.src_port;
             const uint16_t old_dst_port = flow.dst_port;
 
-            if (flow.packetCount() > 1) {
+            if (flow.packetCount() > 0) {
                 handleFinishedFlow(flow);
             }
 

@@ -27,7 +27,7 @@ void CSVWriter::writeHeader(std::ostream& out) {
 }
 
 bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow) {
-    if (flow.packetCount() <= 1) {
+    if (flow.packetCount() <= 0) {
         return false;
     }
 

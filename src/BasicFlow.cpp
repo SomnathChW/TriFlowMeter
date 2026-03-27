@@ -40,12 +40,14 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout_micro
     if (src_ip == pkt.src_ip) {
         min_seg_size_forward = pkt.header_bytes;
         init_win_bytes_forward = pkt.tcp_window;
-        flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
         fwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         f_header_bytes = pkt.header_bytes;
         forward_last_seen = flow_start_time;
-        forward_bytes += pkt.payload_bytes;
+        forward_bytes = pkt.payload_bytes;
         forward_packets++;
+        if (pkt.payload_bytes >= 1) {
+            act_data_pkt_forward++;
+        }
         if (pkt.has_psh) {
             f_psh_cnt++;
         }
@@ -54,11 +56,10 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout_micro
         }
     } else {
         init_win_bytes_backward = pkt.tcp_window;
-        flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         b_header_bytes = pkt.header_bytes;
         backward_last_seen = flow_start_time;
-        backward_bytes += pkt.payload_bytes;
+        backward_bytes = pkt.payload_bytes;
         backward_packets++;
         if (pkt.has_psh) {
             b_psh_cnt++;
@@ -105,7 +106,6 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
     if (src_ip == pkt.src_ip) {
         min_seg_size_forward = pkt.header_bytes;
         init_win_bytes_forward = pkt.tcp_window;
-        flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
         fwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         f_header_bytes = pkt.header_bytes;
         forward_last_seen = flow_start_time;
@@ -120,7 +120,6 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
         }
     } else {
         init_win_bytes_backward = pkt.tcp_window;
-        flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         b_header_bytes = pkt.header_bytes;
         backward_last_seen = flow_start_time;
@@ -171,9 +170,14 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
         forward_last_seen = current_timestamp;
         forward_bytes += pkt.payload_bytes;
         min_seg_size_forward = std::min<uint64_t>(pkt.header_bytes, min_seg_size_forward);
+        if (pkt.has_psh) {
+            f_psh_cnt++;
+        }
+        if (pkt.has_urg) {
+            f_urg_cnt++;
+        }
     } else {
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
-        init_win_bytes_backward = pkt.tcp_window;
         b_header_bytes += pkt.header_bytes;
         if (backward_packets > 0) {
             backward_iat.add(static_cast<double>(current_timestamp - backward_last_seen));
@@ -181,6 +185,12 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
         backward_packets++;
         backward_last_seen = current_timestamp;
         backward_bytes += pkt.payload_bytes;
+        if (pkt.has_psh) {
+            b_psh_cnt++;
+        }
+        if (pkt.has_urg) {
+            b_urg_cnt++;
+        }
     }
 
     flow_iat.add(static_cast<double>(current_timestamp - previous_flow_last_seen));
@@ -201,8 +211,7 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
             bwd_fin_flags = 1;
         }
 
-        // Keep Java-compatible FIN close behavior.
-        if ((bwd_fin_flags + bwd_fin_flags) == 2) {
+        if ((fwd_fin_flags + bwd_fin_flags) == 2) {
             finished = true;
         }
     }
@@ -363,12 +372,18 @@ uint64_t BasicFlow::getTotalBytes() const {
 
 double BasicFlow::getFlowBytesPerSecond() const {
     const double duration_sec = static_cast<double>(getDuration()) / 1000000.0;
-    return static_cast<double>(getTotalBytes()) / duration_sec;
+    if (duration_sec > 0.0) {
+        return static_cast<double>(getTotalBytes()) / duration_sec;
+    }
+    return 0.0;
 }
 
 double BasicFlow::getFlowPacketsPerSecond() const {
     const double duration_sec = static_cast<double>(getDuration()) / 1000000.0;
-    return static_cast<double>(packetCount()) / duration_sec;
+    if (duration_sec > 0.0) {
+        return static_cast<double>(packetCount()) / duration_sec;
+    }
+    return 0.0;
 }
 
 double BasicFlow::getAveragePacketSize() const {
@@ -377,7 +392,7 @@ double BasicFlow::getAveragePacketSize() const {
 
 double BasicFlow::getDownUpRatio() const {
     if (forward_packets > 0) {
-        return static_cast<double>(backward_packets / forward_packets);
+        return static_cast<double>(backward_packets) / static_cast<double>(forward_packets);
     }
     return 0.0;
 }
@@ -440,30 +455,30 @@ double BasicFlow::getBwdIATMin() const {
 
 uint64_t BasicFlow::getSubflowFwdPackets() const {
     if (sf_count <= 0) {
-        return 0;
+        return forward_packets;
     }
-    return static_cast<uint64_t>(forward_packets / sf_count);
+    return static_cast<uint64_t>(static_cast<double>(forward_packets) / static_cast<double>(sf_count));
 }
 
 uint64_t BasicFlow::getSubflowFwdBytes() const {
     if (sf_count <= 0) {
-        return 0;
+        return forward_bytes;
     }
-    return forward_bytes / static_cast<uint64_t>(sf_count);
+    return static_cast<uint64_t>(static_cast<double>(forward_bytes) / static_cast<double>(sf_count));
 }
 
 uint64_t BasicFlow::getSubflowBwdPackets() const {
     if (sf_count <= 0) {
-        return 0;
+        return backward_packets;
     }
-    return static_cast<uint64_t>(backward_packets / sf_count);
+    return static_cast<uint64_t>(static_cast<double>(backward_packets) / static_cast<double>(sf_count));
 }
 
 uint64_t BasicFlow::getSubflowBwdBytes() const {
     if (sf_count <= 0) {
-        return 0;
+        return backward_bytes;
     }
-    return backward_bytes / static_cast<uint64_t>(sf_count);
+    return static_cast<uint64_t>(static_cast<double>(backward_bytes) / static_cast<double>(sf_count));
 }
 
 uint64_t BasicFlow::getFwdBytesPerBulkAvg() const {
