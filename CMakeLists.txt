@@ -7,10 +7,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(triflowmeter
     src/main.cpp
+    src/CLIOptions.cpp
     src/BasicFlow.cpp
     src/FlowGenerator.cpp
     src/CSVWriter.cpp
+    src/JavaNumberFormat.cpp
     src/PacketReader.cpp
+    src/PacketDecoders.cpp
     src/LiveDashboard.cpp
     src/STDOutWriter.cpp
 )
