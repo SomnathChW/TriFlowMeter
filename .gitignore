@@ -1,0 +1,6 @@
+# Ignore build artifacts and generated files
+*.csv
+build/*
+
+# Ignore CMake build files
+CMakeFiles/
