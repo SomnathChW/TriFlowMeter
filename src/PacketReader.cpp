@@ -1,13 +1,96 @@
 #include "PacketReader.h"
 
-#include <arpa/inet.h>
 #include <cstring>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+struct ether_header {
+    u_char ether_dhost[6];
+    u_char ether_shost[6];
+    u_short ether_type;
+};
+
+struct ip {
+#if defined(_MSC_VER)
+    u_char ip_hl : 4;
+    u_char ip_v : 4;
+#else
+    u_char ip_hl : 4;
+    u_char ip_v : 4;
+#endif
+    u_char ip_tos;
+    u_short ip_len;
+    u_short ip_id;
+    u_short ip_off;
+    u_char ip_ttl;
+    u_char ip_p;
+    u_short ip_sum;
+    struct in_addr ip_src;
+    struct in_addr ip_dst;
+};
+
+struct ip6_hdr {
+    union {
+        struct {
+            u_int32_t ip6_un1_flow;
+            u_int16_t ip6_un1_plen;
+            u_int8_t ip6_un1_nxt;
+            u_int8_t ip6_un1_hlim;
+        } ip6_un1;
+        u_int8_t ip6_un2_vfc;
+    } ip6_ctlun;
+    struct in6_addr ip6_src;
+    struct in6_addr ip6_dst;
+};
+
+#define ip6_vfc ip6_ctlun.ip6_un2_vfc
+#define ip6_plen ip6_ctlun.ip6_un1.ip6_un1_plen
+#define ip6_nxt ip6_ctlun.ip6_un1.ip6_un1_nxt
+#define ip6_hlim ip6_ctlun.ip6_un1.ip6_un1_hlim
+
+struct tcphdr {
+    u_short th_sport;
+    u_short th_dport;
+    u_int32_t th_seq;
+    u_int32_t th_ack;
+    u_char th_x2 : 4;
+    u_char th_off : 4;
+    u_char th_flags;
+    u_short th_win;
+    u_short th_sum;
+    u_short th_urp;
+};
+
+struct udphdr {
+    u_short uh_sport;
+    u_short uh_dport;
+    u_short uh_ulen;
+    u_short uh_sum;
+};
+
+#ifndef ETHERTYPE_IP
+#define ETHERTYPE_IP 0x0800
+#endif
+
+#ifndef ETHERTYPE_ARP
+#define ETHERTYPE_ARP 0x0806
+#endif
+
+#ifndef ETHERTYPE_IPV6
+#define ETHERTYPE_IPV6 0x86DD
+#endif
+
+#else
+#include <arpa/inet.h>
 #include <netinet/if_ether.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
+#endif
 
 #ifndef IPPROTO_L2TP
 #define IPPROTO_L2TP 115
