@@ -10,6 +10,7 @@
 #include "PacketReader.h"
 #include "LiveDashboard.h"
 #include "STDOutWriter.h"
+#include "FileUtils.h"
 
 namespace {
 
@@ -90,6 +91,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error opening CSV output: " << csv_path << std::endl;
             return 1;
         }
+        fixOwnershipIfSudo(csv_path, false);
 
         CSVWriter::writeHeader(live_out);
         live_out.flush();
@@ -134,6 +136,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "Error opening CSV output: " << csv_path << std::endl;
             return 1;
         }
+        fixOwnershipIfSudo(csv_path, false);
 
         CSVWriter::writeHeader(live_out);
         live_out.flush();

@@ -16,6 +16,7 @@ add_executable(triflowmeter
     src/PacketDecoders.cpp
     src/LiveDashboard.cpp
     src/STDOutWriter.cpp
+    src/FileUtils.cpp
 )
 
 target_include_directories(triflowmeter PRIVATE

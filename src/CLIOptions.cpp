@@ -1,4 +1,5 @@
 #include "CLIOptions.h"
+#include "FileUtils.h"
 
 #include <filesystem>
 
@@ -31,6 +32,7 @@ std::string deriveCsvPathInDirectory(const std::string& stem, const std::string&
 
     if (!out_dir.empty()) {
         fs::create_directories(out_dir);
+        fixOwnershipIfSudo(out_dir.string(), true);
     }
 
     const fs::path out_file = out_dir / (stem + "_flows.csv");
@@ -172,12 +174,18 @@ std::string resolveCsvPath(const std::string& capture_source,
     const bool trailing_separator = !out_raw.empty() &&
         (out_raw.back() == '/' || out_raw.back() == '\\');
 
-    if (trailing_separator || (fs::exists(out_path) && fs::is_directory(out_path))) {
+    // Check if it's a directory: has trailing slash, exists as directory, or has no extension
+    const bool looks_like_directory = trailing_separator || 
+                                      (fs::exists(out_path) && fs::is_directory(out_path)) ||
+                                      out_path.extension().empty();
+
+    if (looks_like_directory) {
         return deriveCsvPathInDirectory(stem, out_raw);
     }
 
     if (out_path.has_parent_path()) {
         fs::create_directories(out_path.parent_path());
+        fixOwnershipIfSudo(out_path.parent_path().string(), true);
     }
     return out_path.string();
 }
