@@ -34,7 +34,6 @@ public:
 
     void addPacket(const BasicPacketInfo& pkt);
     void finishAllFlows();
-    const std::vector<BasicFlow>& getFinishedFlows() const;
     void setFlowCallback(std::function<void(const BasicFlow&)> callback);
     void setStoreFinishedFlows(bool store_finished_flows);
 

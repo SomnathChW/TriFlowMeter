@@ -9,7 +9,8 @@
 #include "FlowGenerator.h"
 #include "CSVWriter.h"
 #include "PacketReader.h"
-#include "STDWriter.h"
+#include "LiveDashboard.h"
+#include "STDOutWriter.h"
 
 namespace {
 
@@ -89,6 +90,7 @@ int main(int argc, char* argv[]) {
                   << "Options:\n"
                   << "  --flow-timeout <sec>      Flow timeout in seconds (default: 120)\n"
                   << "  --activity-timeout <sec>  Activity timeout in seconds (default: 5)\n"
+                  << "  --stdout                  Write CSV header/rows to stdout\n"
                   << "  -h, --help                Show this help" << std::endl;
     };
 
@@ -98,6 +100,7 @@ int main(int argc, char* argv[]) {
     }
 
     bool live_mode = false;
+    bool stdout_mode = false;
     uint64_t flow_timeout_sec = 120;
     uint64_t activity_timeout_sec = 5;
     std::optional<std::string> capture_source_opt;
@@ -117,6 +120,16 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             live_mode = true;
+            continue;
+        }
+
+        if (arg == "--stdout") {
+            if (stdout_mode) {
+                std::cerr << "Error: --stdout specified more than once." << std::endl;
+                printUsage();
+                return 1;
+            }
+            stdout_mode = true;
             continue;
         }
 
@@ -168,6 +181,13 @@ int main(int argc, char* argv[]) {
     }
 
     const std::string capture_source = *capture_source_opt;
+
+    if (stdout_mode && output_arg_opt.has_value()) {
+        std::cerr << "Error: output path cannot be used together with --stdout." << std::endl;
+        printUsage();
+        return 1;
+    }
+
     const std::string* output_arg = nullptr;
     if (output_arg_opt.has_value()) {
         output_arg = &(*output_arg_opt);
@@ -187,23 +207,39 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (live_mode) {
-        std::cout << "Capturing live on interface: " << capture_source
-                  << " (continuous streaming mode)" << std::endl;
-    } else {
-        std::cout << "Reading pcap file: " << capture_source << std::endl;
-    }
-
     PacketStats stats;
     FlowGenerator flow_gen(flow_timeout_sec, activity_timeout_sec);
     std::uint64_t streamed_rows = 0;
 
-    const std::string csv_path = resolveCsvPath(capture_source, output_arg, !live_mode);
+    std::string csv_path;
+    if (!stdout_mode) {
+        csv_path = resolveCsvPath(capture_source, output_arg, !live_mode);
+    }
 
     std::ofstream live_out;
-    if (live_mode) {
-        PacketStats live_stats_snapshot;
-        STDWriter dashboard("Interface", capture_source, csv_path);
+    if (stdout_mode) {
+        STDOutWriter stdout_writer(live_mode, capture_source);
+        stdout_writer.announceCaptureStart();
+        stdout_writer.writeHeader();
+        stdout_writer.flush();
+
+        flow_gen.setStoreFinishedFlows(false);
+        flow_gen.setFlowCallback([&streamed_rows, &stdout_writer](const BasicFlow& flow) {
+            if (stdout_writer.writeFlowRow(flow)) {
+                streamed_rows++;
+                stdout_writer.flush();
+            }
+        });
+
+        if (!reader.readAll(flow_gen, stats, true, false, live_mode ? &g_stop_capture : nullptr, nullptr)) {
+            std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
+            return 1;
+        }
+    } else if (live_mode) {
+        std::cout << "Capturing live on interface: " << capture_source
+                  << " (continuous streaming mode)" << std::endl;
+
+        LiveDashboard dashboard(capture_source, csv_path);
 
         live_out.open(csv_path.c_str(), std::ios::out | std::ios::trunc);
         if (!live_out.is_open()) {
@@ -232,9 +268,8 @@ int main(int argc, char* argv[]) {
                 true,
                 false,
                 live_mode ? &g_stop_capture : nullptr,
-                [&live_stats_snapshot, &dashboard, &flow_gen](const PacketStats& s) {
-                    live_stats_snapshot = s;
-                    dashboard.setPacketStats(live_stats_snapshot);
+                [&dashboard, &flow_gen](const PacketStats& s) {
+                    dashboard.setPacketStats(s);
                     dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
                     dashboard.refreshIfDue();
                 })) {
@@ -248,6 +283,25 @@ int main(int argc, char* argv[]) {
         dashboard.forceRefresh();
         dashboard.finalize();
     } else {
+        std::cout << "Reading pcap file: " << capture_source << std::endl;
+
+        live_out.open(csv_path.c_str(), std::ios::out | std::ios::trunc);
+        if (!live_out.is_open()) {
+            std::cerr << "Error opening CSV output: " << csv_path << std::endl;
+            return 1;
+        }
+
+        CSVWriter::writeHeader(live_out);
+        live_out.flush();
+
+        flow_gen.setStoreFinishedFlows(false);
+        flow_gen.setFlowCallback([&live_out, &streamed_rows](const BasicFlow& flow) {
+            if (CSVWriter::writeFlowRow(live_out, flow)) {
+                streamed_rows++;
+                live_out.flush();
+            }
+        });
+
         if (!reader.readAll(flow_gen, stats, true, false, nullptr, nullptr)) {
             std::cerr << "Error reading capture stream: " << reader.getLastError() << std::endl;
             return 1;
@@ -257,11 +311,18 @@ int main(int argc, char* argv[]) {
     flow_gen.finishAllFlows();
 
     int csv_rows = -1;
-    if (live_mode) {
+    if (stdout_mode) {
+        csv_rows = static_cast<int>(streamed_rows);
+    } else if (live_mode) {
         live_out.flush();
         csv_rows = static_cast<int>(streamed_rows);
     } else {
-        csv_rows = CSVWriter::writeBasicFlowFeatures(csv_path, flow_gen.getFinishedFlows());
+        live_out.flush();
+        csv_rows = static_cast<int>(streamed_rows);
+    }
+
+    if (stdout_mode) {
+        return 0;
     }
 
     std::cout << "\n=== Packet Statistics ===" << std::endl;

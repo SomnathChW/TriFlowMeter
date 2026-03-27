@@ -1,4 +1,4 @@
-#include "STDWriter.h"
+#include "LiveDashboard.h"
 
 #include <iomanip>
 #include <iostream>
@@ -47,30 +47,28 @@ const std::vector<std::string>& bannerLines() {
     return kBanner;
 }
 
-}
+}  // namespace
 
-STDWriter::STDWriter(const std::string& title,
-                     const std::string& source_name,
-                     const std::string& output_path)
-    : title_(title),
-      source_name_(source_name),
+LiveDashboard::LiveDashboard(const std::string& source_name,
+                             const std::string& output_path)
+        : source_name_(source_name),
       output_path_(output_path),
       start_time_(std::chrono::steady_clock::now()),
       last_refresh_time_(start_time_) {}
 
-void STDWriter::setPacketStats(const PacketStats& stats) {
+void LiveDashboard::setPacketStats(const PacketStats& stats) {
     stats_ = stats;
 }
 
-void STDWriter::setWrittenFlows(std::uint64_t flows) {
+void LiveDashboard::setWrittenFlows(std::uint64_t flows) {
     written_flows_ = flows;
 }
 
-void STDWriter::setActiveFlows(std::uint64_t flows) {
+void LiveDashboard::setActiveFlows(std::uint64_t flows) {
     active_flows_ = flows;
 }
 
-void STDWriter::refreshIfDue() {
+void LiveDashboard::refreshIfDue() {
     const auto now = std::chrono::steady_clock::now();
     if (now - last_refresh_time_ >= std::chrono::seconds(1)) {
         render();
@@ -78,18 +76,18 @@ void STDWriter::refreshIfDue() {
     }
 }
 
-void STDWriter::forceRefresh() {
+void LiveDashboard::forceRefresh() {
     render();
     last_refresh_time_ = std::chrono::steady_clock::now();
 }
 
-void STDWriter::finalize() {
+void LiveDashboard::finalize() {
     if (initialized_) {
         std::cout << "\033[" << kDashboardMove << "B\r" << std::endl;
     }
 }
 
-std::string STDWriter::shortCount(long long value) {
+std::string LiveDashboard::shortCount(long long value) {
     std::ostringstream oss;
     if (value >= 1000000000LL) {
         oss << std::fixed << std::setprecision(1) << (static_cast<double>(value) / 1000000000.0) << "G";
@@ -108,7 +106,7 @@ std::string STDWriter::shortCount(long long value) {
     return s;
 }
 
-std::string STDWriter::clip(const std::string& s, std::size_t width) {
+std::string LiveDashboard::clip(const std::string& s, std::size_t width) {
     if (s.size() <= width) {
         return s;
     }
@@ -118,15 +116,7 @@ std::string STDWriter::clip(const std::string& s, std::size_t width) {
     return s.substr(0, width - 3) + "...";
 }
 
-std::string STDWriter::makeRow(const std::string& content, std::size_t inner_width) {
-    std::string row = clip(content, inner_width);
-    if (row.size() < inner_width) {
-        row.append(inner_width - row.size(), ' ');
-    }
-    return "|" + row + "|";
-}
-
-void STDWriter::render() {
+void LiveDashboard::render() {
     const auto now = std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time_).count();
 

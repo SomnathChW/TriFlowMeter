@@ -11,7 +11,8 @@ add_executable(triflowmeter
     src/FlowGenerator.cpp
     src/CSVWriter.cpp
     src/PacketReader.cpp
-    src/STDWriter.cpp
+    src/LiveDashboard.cpp
+    src/STDOutWriter.cpp
 )
 
 target_include_directories(triflowmeter PRIVATE

@@ -3,7 +3,6 @@
 #include <array>
 #include <charconv>
 #include <cmath>
-#include <fstream>
 #include <iomanip>
 #include <sstream>
 
@@ -283,22 +282,4 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow) {
         << "NeedManualLabel\n";
 
     return true;
-}
-
-int CSVWriter::writeBasicFlowFeatures(const std::string& csv_path, const std::vector<BasicFlow>& flows) {
-    std::ofstream out(csv_path.c_str(), std::ios::out | std::ios::trunc);
-    if (!out.is_open()) {
-        return -1;
-    }
-
-    writeHeader(out);
-
-    int rows = 0;
-    for (const auto& flow : flows) {
-        if (writeFlowRow(out, flow)) {
-            rows++;
-        }
-    }
-
-    return rows;
 }

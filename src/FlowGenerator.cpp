@@ -132,10 +132,6 @@ void FlowGenerator::finishAllFlows() {
     current_flows_.clear();
 }
 
-const std::vector<BasicFlow>& FlowGenerator::getFinishedFlows() const {
-    return finished_flows_;
-}
-
 void FlowGenerator::setFlowCallback(std::function<void(const BasicFlow&)> callback) {
     flow_callback_ = std::move(callback);
 }

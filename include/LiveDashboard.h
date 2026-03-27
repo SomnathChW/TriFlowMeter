@@ -6,9 +6,9 @@
 
 #include "BasicPacketInfo.h"
 
-class STDWriter {
+class LiveDashboard {
 public:
-    STDWriter(const std::string& title, const std::string& source_name, const std::string& output_path);
+    LiveDashboard(const std::string& source_name, const std::string& output_path);
 
     void setPacketStats(const PacketStats& stats);
     void setWrittenFlows(std::uint64_t flows);
@@ -19,7 +19,6 @@ public:
     void finalize();
 
 private:
-    std::string title_;
     std::string source_name_;
     std::string output_path_;
     PacketStats stats_{};
@@ -32,6 +31,5 @@ private:
 
     static std::string shortCount(long long value);
     static std::string clip(const std::string& s, std::size_t width);
-    static std::string makeRow(const std::string& content, std::size_t inner_width);
     void render();
 };
