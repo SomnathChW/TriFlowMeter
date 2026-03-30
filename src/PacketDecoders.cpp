@@ -111,6 +111,7 @@ bool decodeIPv4(const u_char* ip_packet, int remaining_len, BasicPacketInfo* pkt
         pkt_info->src_ip = src_ip;
         pkt_info->dst_ip = dst_ip;
         pkt_info->addr_len = 4;
+        pkt_info->ip_ttl = ip_header->ip_ttl;
         std::memcpy(pkt_info->src_bytes, &(ip_header->ip_src), 4);
         std::memcpy(pkt_info->dst_bytes, &(ip_header->ip_dst), 4);
 
@@ -175,6 +176,7 @@ bool decodeIPv6(const u_char* ip_packet, int remaining_len, BasicPacketInfo* pkt
         pkt_info->src_ip = src_ip;
         pkt_info->dst_ip = dst_ip;
         pkt_info->addr_len = 16;
+        pkt_info->ip_ttl = ip6_header->ip6_hlim;
         std::memcpy(pkt_info->src_bytes, &(ip6_header->ip6_src), 16);
         std::memcpy(pkt_info->dst_bytes, &(ip6_header->ip6_dst), 16);
 

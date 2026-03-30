@@ -33,12 +33,11 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout_micro
     start_active_time = flow_start_time;
     end_active_time = flow_start_time;
 
-    updateFlowBulk(pkt);
-    detectUpdateSubflows(pkt);
     checkFlags(pkt);
 
     flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
     if (src_ip == pkt.src_ip) {
+        fwd_initial_ttl = pkt.ip_ttl;
         min_seg_size_forward = pkt.header_bytes;
         init_win_bytes_forward = pkt.tcp_window;
         fwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
@@ -49,24 +48,16 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout_micro
         if (pkt.payload_bytes >= 1) {
             act_data_pkt_forward++;
         }
-        if (pkt.has_psh) {
-            f_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            f_urg_cnt++;
-        }
     } else {
+        bwd_initial_ttl = pkt.ip_ttl;
         init_win_bytes_backward = pkt.tcp_window;
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         b_header_bytes = pkt.header_bytes;
         backward_last_seen = flow_start_time;
         backward_bytes = pkt.payload_bytes;
         backward_packets++;
-        if (pkt.has_psh) {
-            b_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            b_urg_cnt++;
+        if (pkt.payload_bytes >= 1) {
+            act_data_pkt_backward++;
         }
     }
 
@@ -99,12 +90,11 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
     start_active_time = flow_start_time;
     end_active_time = flow_start_time;
 
-    updateFlowBulk(pkt);
-    detectUpdateSubflows(pkt);
     checkFlags(pkt);
     flow_length_stats.add(static_cast<double>(pkt.payload_bytes));
 
     if (src_ip == pkt.src_ip) {
+        fwd_initial_ttl = pkt.ip_ttl;
         min_seg_size_forward = pkt.header_bytes;
         init_win_bytes_forward = pkt.tcp_window;
         fwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
@@ -113,13 +103,11 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
         forward_packets++;
         forward_bytes = pkt.payload_bytes;
         backward_bytes = 0;
-        if (pkt.has_psh) {
-            f_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            f_urg_cnt++;
+        if (pkt.payload_bytes >= 1) {
+            act_data_pkt_forward++;
         }
     } else {
+        bwd_initial_ttl = pkt.ip_ttl;
         init_win_bytes_backward = pkt.tcp_window;
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         b_header_bytes = pkt.header_bytes;
@@ -127,11 +115,8 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
         backward_packets++;
         forward_bytes = 0;
         backward_bytes = pkt.payload_bytes;
-        if (pkt.has_psh) {
-            b_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            b_urg_cnt++;
+        if (pkt.payload_bytes >= 1) {
+            act_data_pkt_backward++;
         }
     }
 
@@ -147,8 +132,6 @@ BasicFlow::BasicFlow(const BasicPacketInfo& pkt,
 }
 
 void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
-    updateFlowBulk(pkt);
-    detectUpdateSubflows(pkt);
     checkFlags(pkt);
 
     const uint64_t current_timestamp = packetTimeMicros(pkt);
@@ -171,13 +154,14 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
         forward_last_seen = current_timestamp;
         forward_bytes += pkt.payload_bytes;
         min_seg_size_forward = std::min<uint64_t>(pkt.header_bytes, min_seg_size_forward);
-        if (pkt.has_psh) {
-            f_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            f_urg_cnt++;
-        }
     } else {
+        if (backward_packets == 0) {
+            bwd_initial_ttl = pkt.ip_ttl;
+            init_win_bytes_backward = pkt.tcp_window;
+        }
+        if (pkt.payload_bytes >= 1) {
+            act_data_pkt_backward++;
+        }
         bwd_pkt_stats.add(static_cast<double>(pkt.payload_bytes));
         b_header_bytes += pkt.header_bytes;
         if (backward_packets > 0) {
@@ -186,12 +170,6 @@ void BasicFlow::addPacket(const BasicPacketInfo& pkt) {
         backward_packets++;
         backward_last_seen = current_timestamp;
         backward_bytes += pkt.payload_bytes;
-        if (pkt.has_psh) {
-            b_psh_cnt++;
-        }
-        if (pkt.has_urg) {
-            b_urg_cnt++;
-        }
     }
 
     flow_iat.add(static_cast<double>(current_timestamp - previous_flow_last_seen));
@@ -250,106 +228,6 @@ void BasicFlow::checkFlags(const BasicPacketInfo& pkt) {
     }
     if (pkt.has_ece) {
         ece_flag_count++;
-    }
-}
-
-void BasicFlow::detectUpdateSubflows(const BasicPacketInfo& pkt) {
-    const uint64_t ts = packetTimeMicros(pkt);
-    if (sf_last_packet_ts == static_cast<uint64_t>(-1)) {
-        sf_last_packet_ts = ts;
-        sf_ac_helper = ts;
-    }
-    if (((ts - sf_last_packet_ts) / 1000000.0) > 1.0) {
-        sf_count++;
-        updateActiveIdleTime(ts, activity_timeout_micros);
-        sf_ac_helper = ts;
-    }
-    sf_last_packet_ts = ts;
-}
-
-void BasicFlow::updateFlowBulk(const BasicPacketInfo& pkt) {
-    if (src_ip == pkt.src_ip) {
-        updateForwardBulk(pkt, blast_bulk_ts);
-    } else {
-        updateBackwardBulk(pkt, flast_bulk_ts);
-    }
-}
-
-void BasicFlow::updateForwardBulk(const BasicPacketInfo& pkt, uint64_t ts_of_last_bulk_in_other) {
-    const uint64_t size = pkt.payload_bytes;
-    if (ts_of_last_bulk_in_other > fbulk_start_helper) {
-        fbulk_start_helper = 0;
-    }
-    if (size == 0) {
-        return;
-    }
-
-    const uint64_t ts = packetTimeMicros(pkt);
-    if (fbulk_start_helper == 0) {
-        fbulk_start_helper = ts;
-        fbulk_packet_count_helper = 1;
-        fbulk_size_helper = size;
-        flast_bulk_ts = ts;
-    } else {
-        if (((ts - flast_bulk_ts) / 1000000.0) > 1.0) {
-            fbulk_start_helper = ts;
-            flast_bulk_ts = ts;
-            fbulk_packet_count_helper = 1;
-            fbulk_size_helper = size;
-        } else {
-            fbulk_packet_count_helper += 1;
-            fbulk_size_helper += size;
-            if (fbulk_packet_count_helper == 4) {
-                fbulk_state_count += 1;
-                fbulk_packet_count += fbulk_packet_count_helper;
-                fbulk_size_total += fbulk_size_helper;
-                fbulk_duration += ts - fbulk_start_helper;
-            } else if (fbulk_packet_count_helper > 4) {
-                fbulk_packet_count += 1;
-                fbulk_size_total += size;
-                fbulk_duration += ts - flast_bulk_ts;
-            }
-            flast_bulk_ts = ts;
-        }
-    }
-}
-
-void BasicFlow::updateBackwardBulk(const BasicPacketInfo& pkt, uint64_t ts_of_last_bulk_in_other) {
-    const uint64_t size = pkt.payload_bytes;
-    if (ts_of_last_bulk_in_other > bbulk_start_helper) {
-        bbulk_start_helper = 0;
-    }
-    if (size == 0) {
-        return;
-    }
-
-    const uint64_t ts = packetTimeMicros(pkt);
-    if (bbulk_start_helper == 0) {
-        bbulk_start_helper = ts;
-        bbulk_packet_count_helper = 1;
-        bbulk_size_helper = size;
-        blast_bulk_ts = ts;
-    } else {
-        if (((ts - blast_bulk_ts) / 1000000.0) > 1.0) {
-            bbulk_start_helper = ts;
-            blast_bulk_ts = ts;
-            bbulk_packet_count_helper = 1;
-            bbulk_size_helper = size;
-        } else {
-            bbulk_packet_count_helper += 1;
-            bbulk_size_helper += size;
-            if (bbulk_packet_count_helper == 4) {
-                bbulk_state_count += 1;
-                bbulk_packet_count += bbulk_packet_count_helper;
-                bbulk_size_total += bbulk_size_helper;
-                bbulk_duration += ts - bbulk_start_helper;
-            } else if (bbulk_packet_count_helper > 4) {
-                bbulk_packet_count += 1;
-                bbulk_size_total += size;
-                bbulk_duration += ts - blast_bulk_ts;
-            }
-            blast_bulk_ts = ts;
-        }
     }
 }
 
@@ -457,78 +335,22 @@ double BasicFlow::getBwdIATMin() const {
     return backward_packets > 1 ? backward_iat.min : 0.0;
 }
 
-uint64_t BasicFlow::getSubflowFwdPackets() const {
-    if (sf_count <= 0) {
-        return forward_packets;
-    }
-    return static_cast<uint64_t>(static_cast<double>(forward_packets) / static_cast<double>(sf_count));
-}
-
-uint64_t BasicFlow::getSubflowFwdBytes() const {
-    if (sf_count <= 0) {
-        return forward_bytes;
-    }
-    return static_cast<uint64_t>(static_cast<double>(forward_bytes) / static_cast<double>(sf_count));
-}
-
-uint64_t BasicFlow::getSubflowBwdPackets() const {
-    if (sf_count <= 0) {
-        return backward_packets;
-    }
-    return static_cast<uint64_t>(static_cast<double>(backward_packets) / static_cast<double>(sf_count));
-}
-
-uint64_t BasicFlow::getSubflowBwdBytes() const {
-    if (sf_count <= 0) {
-        return backward_bytes;
-    }
-    return static_cast<uint64_t>(static_cast<double>(backward_bytes) / static_cast<double>(sf_count));
-}
-
-uint64_t BasicFlow::getFwdBytesPerBulkAvg() const {
-    if (fbulk_state_count != 0) {
-        return fbulk_size_total / fbulk_state_count;
-    }
-    return 0;
-}
-
-uint64_t BasicFlow::getFwdPacketsPerBulkAvg() const {
-    if (fbulk_state_count != 0) {
-        return fbulk_packet_count / fbulk_state_count;
-    }
-    return 0;
-}
-
-uint64_t BasicFlow::getFwdBulkRateAvg() const {
-    if (fbulk_duration != 0) {
-        return static_cast<uint64_t>(fbulk_size_total / (static_cast<double>(fbulk_duration) / 1000000.0));
-    }
-    return 0;
-}
-
-uint64_t BasicFlow::getBwdBytesPerBulkAvg() const {
-    if (bbulk_state_count != 0) {
-        return bbulk_size_total / bbulk_state_count;
-    }
-    return 0;
-}
-
-uint64_t BasicFlow::getBwdPacketsPerBulkAvg() const {
-    if (bbulk_state_count != 0) {
-        return bbulk_packet_count / bbulk_state_count;
-    }
-    return 0;
-}
-
-uint64_t BasicFlow::getBwdBulkRateAvg() const {
-    if (bbulk_duration != 0) {
-        return static_cast<uint64_t>(bbulk_size_total / (static_cast<double>(bbulk_duration) / 1000000.0));
-    }
-    return 0;
-}
-
 std::string BasicFlow::getTimestampString() const {
     std::time_t raw = static_cast<std::time_t>(start_time_sec);
+    std::tm* tm_info = std::localtime(&raw);
+    if (tm_info == nullptr) {
+        return "";
+    }
+
+    char buffer[64];
+    if (std::strftime(buffer, sizeof(buffer), "%d/%m/%Y %I:%M:%S %p", tm_info) == 0) {
+        return "";
+    }
+    return std::string(buffer);
+}
+
+std::string BasicFlow::getFlowEndTimeString() const {
+    std::time_t raw = static_cast<std::time_t>(last_seen_sec);
     std::tm* tm_info = std::localtime(&raw);
     if (tm_info == nullptr) {
         return "";

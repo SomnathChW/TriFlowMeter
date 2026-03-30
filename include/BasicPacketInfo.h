@@ -51,6 +51,7 @@ struct BasicPacketInfo {
     bool has_cwr = false;
     bool has_rst = false;
     int tcp_window = 0;
+    uint8_t ip_ttl = 0;
 
     bool compareIPs() const {
         for (int i = 0; i < addr_len; i++) {

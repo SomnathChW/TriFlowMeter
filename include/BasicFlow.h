@@ -102,11 +102,10 @@ public:
     int init_win_bytes_forward = 0;
     int init_win_bytes_backward = 0;
     uint64_t act_data_pkt_forward = 0;
+    uint64_t act_data_pkt_backward = 0;
     uint64_t min_seg_size_forward = 0;
-    int f_psh_cnt = 0;
-    int b_psh_cnt = 0;
-    int f_urg_cnt = 0;
-    int b_urg_cnt = 0;
+    uint8_t fwd_initial_ttl = 0;
+    uint8_t bwd_initial_ttl = 0;
     int fin_flag_count = 0;
     int syn_flag_count = 0;
     int rst_flag_count = 0;
@@ -124,28 +123,6 @@ public:
     RunningStats flow_length_stats;
     RunningStats flow_active;
     RunningStats flow_idle;
-
-    uint64_t sf_last_packet_ts = static_cast<uint64_t>(-1);
-    int sf_count = 1;
-    uint64_t sf_ac_helper = static_cast<uint64_t>(-1);
-
-    uint64_t fbulk_duration = 0;
-    uint64_t fbulk_packet_count = 0;
-    uint64_t fbulk_size_total = 0;
-    uint64_t fbulk_state_count = 0;
-    uint64_t fbulk_packet_count_helper = 0;
-    uint64_t fbulk_start_helper = 0;
-    uint64_t fbulk_size_helper = 0;
-    uint64_t flast_bulk_ts = 0;
-
-    uint64_t bbulk_duration = 0;
-    uint64_t bbulk_packet_count = 0;
-    uint64_t bbulk_size_total = 0;
-    uint64_t bbulk_state_count = 0;
-    uint64_t bbulk_packet_count_helper = 0;
-    uint64_t bbulk_start_helper = 0;
-    uint64_t bbulk_size_helper = 0;
-    uint64_t blast_bulk_ts = 0;
 
     int fwd_fin_flags = 0;
     int bwd_fin_flags = 0;
@@ -184,23 +161,10 @@ public:
     double getBwdIATStd() const;
     double getBwdIATMax() const;
     double getBwdIATMin() const;
-    uint64_t getSubflowFwdPackets() const;
-    uint64_t getSubflowFwdBytes() const;
-    uint64_t getSubflowBwdPackets() const;
-    uint64_t getSubflowBwdBytes() const;
-    uint64_t getFwdBytesPerBulkAvg() const;
-    uint64_t getFwdPacketsPerBulkAvg() const;
-    uint64_t getFwdBulkRateAvg() const;
-    uint64_t getBwdBytesPerBulkAvg() const;
-    uint64_t getBwdPacketsPerBulkAvg() const;
-    uint64_t getBwdBulkRateAvg() const;
     std::string getTimestampString() const;
+    std::string getFlowEndTimeString() const;
 
 private:
     uint64_t packetTimeMicros(const BasicPacketInfo& pkt) const;
     void checkFlags(const BasicPacketInfo& pkt);
-    void detectUpdateSubflows(const BasicPacketInfo& pkt);
-    void updateFlowBulk(const BasicPacketInfo& pkt);
-    void updateForwardBulk(const BasicPacketInfo& pkt, uint64_t ts_of_last_bulk_in_other);
-    void updateBackwardBulk(const BasicPacketInfo& pkt, uint64_t ts_of_last_bulk_in_other);
 };
