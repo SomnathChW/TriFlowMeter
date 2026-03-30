@@ -4,3 +4,6 @@ build/*
 
 # Ignore CMake build files
 CMakeFiles/
+
+# Agents documentation
+AGENTS.md
