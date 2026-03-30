@@ -31,7 +31,6 @@
 #include "CSVWriter.h"
 #include "PacketReader.h"
 #include "LiveDashboard.h"
-#include "STDOutWriter.h"
 #include "FileUtils.h"
 
 namespace {
@@ -85,16 +84,20 @@ int main(int argc, char* argv[]) {
 
     std::ofstream live_out;
     if (opts.stdout_mode) {
-        STDOutWriter stdout_writer(opts.live_mode, capture_source);
-        stdout_writer.announceCaptureStart();
-        stdout_writer.writeHeader();
-        stdout_writer.flush();
+        if (opts.live_mode) {
+            std::cerr << "[+] Capturing live on interface: " << capture_source << std::endl;
+        } else {
+            std::cerr << "[+] Reading pcap file: " << capture_source << std::endl;
+        }
+
+        CSVWriter::writeHeader(std::cout);
+        std::cout.flush();
 
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&streamed_rows, &stdout_writer](const BasicFlow& flow) {
-            if (stdout_writer.writeFlowRow(flow)) {
+        flow_gen.setFlowCallback([&streamed_rows, &opts](const BasicFlow& flow) {
+            if (CSVWriter::writeFlowRow(std::cout, flow, opts.label)) {
                 streamed_rows++;
-                stdout_writer.flush();
+                std::cout.flush();
             }
         });
 
@@ -127,8 +130,8 @@ int main(int argc, char* argv[]) {
             }
         };
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi](const BasicFlow& flow) {
-            if (CSVWriter::writeFlowRow(live_out, flow)) {
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi, &opts](const BasicFlow& flow) {
+            if (CSVWriter::writeFlowRow(live_out, flow, opts.label)) {
                 streamed_rows++;
                 dashboard.setWrittenFlows(streamed_rows);
                 dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));
@@ -183,8 +186,8 @@ int main(int argc, char* argv[]) {
         };
 
         flow_gen.setStoreFinishedFlows(false);
-        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi](const BasicFlow& flow) {
-            if (CSVWriter::writeFlowRow(live_out, flow)) {
+        flow_gen.setFlowCallback([&live_out, &streamed_rows, &dashboard, &flow_gen, &tickUi, &opts](const BasicFlow& flow) {
+            if (CSVWriter::writeFlowRow(live_out, flow, opts.label)) {
                 streamed_rows++;
                 dashboard.setWrittenFlows(streamed_rows);
                 dashboard.setActiveFlows(static_cast<std::uint64_t>(flow_gen.getCurrentFlowCount()));

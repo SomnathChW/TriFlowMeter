@@ -31,7 +31,7 @@ void CSVWriter::writeHeader(std::ostream& out) {
         << "Label\n";
 }
 
-bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow) {
+bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std::string& label) {
     if (flow.packetCount() <= 0) {
         return false;
     }
@@ -167,7 +167,7 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow) {
         << (has_idle ? formatJavaLikeDouble(flow.flow_idle.stddev()) : std::string("0")) << ',';
 
     // Label
-    out << "NeedManualLabel\n";
+    out << label << '\n';
 
     return true;
 }

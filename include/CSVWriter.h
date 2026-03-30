@@ -26,5 +26,5 @@
 class CSVWriter {
 public:
     static void writeHeader(std::ostream& out);
-    static bool writeFlowRow(std::ostream& out, const BasicFlow& flow);
+    static bool writeFlowRow(std::ostream& out, const BasicFlow& flow, const std::string& label = "Needs_Label");
 };

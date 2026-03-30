@@ -30,6 +30,7 @@ struct CLIOptions {
     std::uint64_t activity_timeout_sec = 5;
     std::string capture_source;
     std::optional<std::string> output_arg;
+    std::string label = "Needs_Label";
 };
 
 enum class CLIParseStatus {

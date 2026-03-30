@@ -53,6 +53,7 @@ std::string buildUsage(const std::string& program_name) {
            "Options:\n"
            "  --flow-timeout <sec>      Flow timeout in seconds (default: 120)\n"
            "  --activity-timeout <sec>  Activity timeout in seconds (default: 5)\n"
+           "  --label <label>           Label for all flows (default: Needs_Label)\n"
            "  --stdout                  Write CSV header/rows to stdout\n"
            "  -h, --help                Show this help";
 }
@@ -126,6 +127,16 @@ CLIParseResult parseCliArgs(int argc, char* argv[]) {
                 result.error = "--activity-timeout must be a non-negative integer.";
                 return result;
             }
+            continue;
+        }
+
+        if (arg == "--label") {
+            if (i + 1 >= argc) {
+                result.status = CLIParseStatus::Error;
+                result.error = "--label requires a value.";
+                return result;
+            }
+            result.options.label = argv[++i];
             continue;
         }
 

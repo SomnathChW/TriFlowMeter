@@ -38,7 +38,6 @@ add_executable(triflowmeter
     src/PacketReader.cpp
     src/PacketDecoders.cpp
     src/LiveDashboard.cpp
-    src/STDOutWriter.cpp
     src/FileUtils.cpp
 )
 
