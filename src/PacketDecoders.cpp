@@ -220,7 +220,7 @@ bool decodeIPv6(const u_char* ip_packet, int remaining_len, BasicPacketInfo* pkt
     return true;
 }
 
-bool decodeL2TP(const u_char* ip_packet, int remaining_len) {
+bool decodeL2TP(const u_char* ip_packet, int remaining_len, BasicPacketInfo* pkt_info) {
     if (remaining_len < static_cast<int>(sizeof(struct ip))) {
         return false;
     }
@@ -244,16 +244,19 @@ bool decodeL2TP(const u_char* ip_packet, int remaining_len) {
     if (inner_remaining >= static_cast<int>(sizeof(struct ip))) {
         const struct ip* inner_ip = reinterpret_cast<const struct ip*>(inner_packet);
         if (inner_ip->ip_v == 4) {
-            return decodeIPv4(inner_packet, inner_remaining);
+            return decodeIPv4(inner_packet, inner_remaining, pkt_info);
         }
         if (inner_ip->ip_v == 6) {
-            return decodeIPv6(inner_packet, inner_remaining);
+            return decodeIPv6(inner_packet, inner_remaining, pkt_info);
         }
     }
 
     return false;
 }
 
+// NOTE: This function currently creates fake IP addresses from EtherType bytes (Java compatibility quirk).
+// TODO: Reimplement with proper ARP structure parsing for future security analysis features.
+/*
 bool decodeArpCompat(u_short eth_type,
                      const u_char* payload,
                      int remaining_len,
@@ -307,5 +310,6 @@ bool decodeArpCompat(u_short eth_type,
     pkt_info->tcp_window = 0;
     return true;
 }
+*/
 
 }  // namespace packetdecode

@@ -164,14 +164,18 @@ bool PacketReader::readAll(FlowGenerator& flow_gen,
             valid = packetdecode::decodeIPv6(ip_packet, remaining_len, &packet_info);
         }
 
-        if (!valid && eth_type == ETHERTYPE_ARP) {
-            valid = packetdecode::decodeArpCompat(eth_type, ip_packet, remaining_len, &packet_info);
-        }
+        // TODO: ARP handling disabled - current implementation creates garbage flows from EtherType bytes.
+        // For ML training on flow-based features, ARP packets don't provide meaningful data since:
+        // - Non-temporal models can't detect MAC-IP inconsistencies (ARP poisoning)
+        // - ARP isn't a sustained flow with statistics (IAT, duration, packet patterns)
+        // Future: Implement proper ARP parsing for temporal/stateful security analysis system
+        // if (!valid && eth_type == ETHERTYPE_ARP) {
+        //     valid = packetdecode::decodeArpCompat(eth_type, ip_packet, remaining_len, &packet_info);
+        // }
 
-        // Java PacketReader falls back to VPN/L2TP parsing when direct IP parse fails.
         if (!valid) {
-            const bool is_vpn = packetdecode::decodeL2TP(ip_packet, remaining_len);
-            if (is_vpn) {
+            valid = packetdecode::decodeL2TP(ip_packet, remaining_len, &packet_info);
+            if (valid) {
                 stats.vpn_packets++;
             }
         }

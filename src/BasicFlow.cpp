@@ -268,8 +268,11 @@ void BasicFlow::detectUpdateSubflows(const BasicPacketInfo& pkt) {
 }
 
 void BasicFlow::updateFlowBulk(const BasicPacketInfo& pkt) {
-    // Keep Java behavior (object identity check on byte arrays) by always taking backward path.
-    updateBackwardBulk(pkt, flast_bulk_ts);
+    if (src_ip == pkt.src_ip) {
+        updateForwardBulk(pkt, blast_bulk_ts);
+    } else {
+        updateBackwardBulk(pkt, flast_bulk_ts);
+    }
 }
 
 void BasicFlow::updateForwardBulk(const BasicPacketInfo& pkt, uint64_t ts_of_last_bulk_in_other) {
