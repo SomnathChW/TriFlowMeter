@@ -2,6 +2,9 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
+> **Note:**
+> CICFlowMeter Compatible output is only valid till v0.0.1. If you need compatibilty, use version v0.0.1.
+
 TriFlowMeter is a high-performance network flow analyzer that extracts statistical features from network traffic for machine learning applications, intrusion detection, and network behavior analysis. It processes PCAP files or captures live network traffic and generates comprehensive flow-level statistics in CSV format.
 
 ## Overview
@@ -103,6 +106,9 @@ TriFlowMeter generates CSV files with 84 columns per flow, including:
 - **TCP Flags**: Counts for SYN, FIN, RST, PSH, ACK, URG, CWR, ECE
 - **Behavioral Features**: Bulk transfer metrics, subflow statistics
 - **Statistical Metrics**: Mean, standard deviation, min/max for various attributes
+
+> **Note:**
+> For CICFlowMeter-compatible CSV output, use the v0.0.1 tag/release. If you require CICFlowMeter compatibility, download or checkout the v0.0.1 release.
 
 See [docs/FEATURES.md](docs/FEATURES.md) for detailed feature descriptions.
 
