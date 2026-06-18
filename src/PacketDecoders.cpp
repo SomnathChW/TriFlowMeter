@@ -11,6 +11,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <cstdint>
 
 struct ip {
 #if defined(_MSC_VER)
@@ -34,12 +35,12 @@ struct ip {
 struct ip6_hdr {
     union {
         struct {
-            u_int32_t ip6_un1_flow;
-            u_int16_t ip6_un1_plen;
-            u_int8_t ip6_un1_nxt;
-            u_int8_t ip6_un1_hlim;
+            uint32_t ip6_un1_flow;
+            uint16_t ip6_un1_plen;
+            uint8_t ip6_un1_nxt;
+            uint8_t ip6_un1_hlim;
         } ip6_un1;
-        u_int8_t ip6_un2_vfc;
+        uint8_t ip6_un2_vfc;
     } ip6_ctlun;
     struct in6_addr ip6_src;
     struct in6_addr ip6_dst;
@@ -53,8 +54,8 @@ struct ip6_hdr {
 struct tcphdr {
     u_short th_sport;
     u_short th_dport;
-    u_int32_t th_seq;
-    u_int32_t th_ack;
+    uint32_t th_seq;
+    uint32_t th_ack;
     u_char th_x2 : 4;
     u_char th_off : 4;
     u_char th_flags;
@@ -83,12 +84,15 @@ struct udphdr {
 #define IPPROTO_L2TP 115
 #endif
 
-#ifndef TH_ECE
-#define TH_ECE 0x40
-#endif
-
-#ifndef TH_CWR
-#define TH_CWR 0x80
+#ifndef TH_FIN
+#define TH_FIN  0x01
+#define TH_SYN  0x02
+#define TH_RST  0x04
+#define TH_PUSH 0x08
+#define TH_ACK  0x10
+#define TH_URG  0x20
+#define TH_ECE  0x40
+#define TH_CWR  0x80
 #endif
 
 namespace packetdecode {

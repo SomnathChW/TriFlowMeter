@@ -52,7 +52,12 @@ brew install cmake libpcap
 
 **Windows:**
 
-- Install [Npcap](https://npcap.com/) with SDK
+To build natively without bloated IDEs:
+1. Install the [Npcap Driver](https://npcap.com/) (you do **not** need the SDK zip).
+2. Install a lightweight compiler, CMake, and the pcap headers via [MSYS2](https://www.msys2.org/). Once installed, open the MSYS2 terminal and run:
+   ```bash
+   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake make mingw-w64-x86_64-libpcap
+   ```
 
 ### Compilation
 
@@ -60,14 +65,14 @@ brew install cmake libpcap
 mkdir build
 cd build
 cmake ..
-make -j$(nproc)
+cmake --build . -j 4
 ```
 
 For optimized builds (default is Release with native optimizations):
 
 ```bash
 cmake -DCMAKE_BUILD_TYPE=Release -DTRIFLOWMETER_ENABLE_NATIVE_OPT=ON ..
-make -j$(nproc)
+cmake --build . -j 4
 ```
 
 To disable CPU-specific optimizations (for portable binaries):

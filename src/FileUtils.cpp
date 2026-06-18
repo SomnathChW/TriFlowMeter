@@ -13,6 +13,7 @@
 namespace fs = std::filesystem;
 
 void fixOwnershipIfSudo(const std::string& path, bool is_directory) {
+#ifndef _WIN32
     const char* sudo_uid_str = std::getenv("SUDO_UID");
     const char* sudo_gid_str = std::getenv("SUDO_GID");
     
@@ -40,4 +41,5 @@ void fixOwnershipIfSudo(const std::string& path, bool is_directory) {
             // If something fails, continue anyway
         }
     }
+#endif
 }
