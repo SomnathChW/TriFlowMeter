@@ -5,9 +5,7 @@
 
 #include "CSVWriter.h"
 
-#include "JavaNumberFormat.h"
 
-using javafmt::formatJavaLikeDouble;
 
 void CSVWriter::writeHeader(std::ostream& out) {
     out << "Flow ID,Src IP,Src Port,Dst IP,Dst Port,Protocol,"
@@ -93,53 +91,53 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std
 
     // Rates & Ratios
     /* Removed:
-       << formatJavaLikeDouble(fwd_packets_per_sec) << ','
-       << formatJavaLikeDouble(bwd_packets_per_sec) << ','
+       << fwd_packets_per_sec << ','
+       << bwd_packets_per_sec << ','
     */
-    out << formatJavaLikeDouble(flow_packets_per_sec) << ','
-        << formatJavaLikeDouble(flow_bytes_per_sec) << ',' // Note: Header is now Payload Bytes/s
-        << formatJavaLikeDouble(payload_ratio) << ','
-        << formatJavaLikeDouble(packet_count_ratio) << ','
-        << formatJavaLikeDouble(header_to_total_ratio) << ',';
+    out << flow_packets_per_sec << ','
+        << flow_bytes_per_sec << ',' // Note: Header is now Payload Bytes/s
+        << payload_ratio << ','
+        << packet_count_ratio << ','
+        << header_to_total_ratio << ',';
 
     // Packet Size Profiles - Fwd (4 features)
-    out << (has_fwd_stats ? formatJavaLikeDouble(flow.fwd_pkt_stats.min) : std::string("0")) << ','
-        << (has_fwd_stats ? formatJavaLikeDouble(flow.fwd_pkt_stats.max) : std::string("0")) << ','
-        << (has_fwd_stats ? formatJavaLikeDouble(flow.fwd_pkt_stats.mean) : std::string("0")) << ','
-        << (has_fwd_stats ? formatJavaLikeDouble(flow.fwd_pkt_stats.stddev()) : std::string("0")) << ',';
+    out << (has_fwd_stats ? flow.fwd_pkt_stats.min : 0.0) << ','
+        << (has_fwd_stats ? flow.fwd_pkt_stats.max : 0.0) << ','
+        << (has_fwd_stats ? flow.fwd_pkt_stats.mean : 0.0) << ','
+        << (has_fwd_stats ? flow.fwd_pkt_stats.stddev() : 0.0) << ',';
 
     // Packet Size Profiles - Bwd (4 features)
-    out << (has_bwd_stats ? formatJavaLikeDouble(flow.bwd_pkt_stats.min) : std::string("0")) << ','
-        << (has_bwd_stats ? formatJavaLikeDouble(flow.bwd_pkt_stats.max) : std::string("0")) << ','
-        << (has_bwd_stats ? formatJavaLikeDouble(flow.bwd_pkt_stats.mean) : std::string("0")) << ','
-        << (has_bwd_stats ? formatJavaLikeDouble(flow.bwd_pkt_stats.stddev()) : std::string("0")) << ',';
+    out << (has_bwd_stats ? flow.bwd_pkt_stats.min : 0.0) << ','
+        << (has_bwd_stats ? flow.bwd_pkt_stats.max : 0.0) << ','
+        << (has_bwd_stats ? flow.bwd_pkt_stats.mean : 0.0) << ','
+        << (has_bwd_stats ? flow.bwd_pkt_stats.stddev() : 0.0) << ',';
 
     // Packet Size Profiles - Total (4 features)
-    out << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.min) : std::string("0")) << ','
-        << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.max) : std::string("0")) << ','
-        << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.mean) : std::string("0")) << ','
-        << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.stddev()) : std::string("0")) << ',';
+    out << (has_pkt_len ? flow.flow_length_stats.min : 0.0) << ','
+        << (has_pkt_len ? flow.flow_length_stats.max : 0.0) << ','
+        << (has_pkt_len ? flow.flow_length_stats.mean : 0.0) << ','
+        << (has_pkt_len ? flow.flow_length_stats.stddev() : 0.0) << ',';
 
     // IAT Profiles - Fwd
-    /* Removed: << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.sum) : std::string("0")) << ',' */
-    out << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.min) : std::string("0")) << ','
-        << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.max) : std::string("0")) << ','
-        << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.mean) : std::string("0")) << ','
-        << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.stddev()) : std::string("0")) << ',';
+    /* Removed: << (has_fwd_iat ? flow.forward_iat.sum : 0.0) << ',' */
+    out << (has_fwd_iat ? flow.forward_iat.min : 0.0) << ','
+        << (has_fwd_iat ? flow.forward_iat.max : 0.0) << ','
+        << (has_fwd_iat ? flow.forward_iat.mean : 0.0) << ','
+        << (has_fwd_iat ? flow.forward_iat.stddev() : 0.0) << ',';
 
     // IAT Profiles - Bwd
-    /* Removed: << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.sum) : std::string("0")) << ',' */
-    out << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.min) : std::string("0")) << ','
-        << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.max) : std::string("0")) << ','
-        << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.mean) : std::string("0")) << ','
-        << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.stddev()) : std::string("0")) << ',';
+    /* Removed: << (has_bwd_iat ? flow.backward_iat.sum : 0.0) << ',' */
+    out << (has_bwd_iat ? flow.backward_iat.min : 0.0) << ','
+        << (has_bwd_iat ? flow.backward_iat.max : 0.0) << ','
+        << (has_bwd_iat ? flow.backward_iat.mean : 0.0) << ','
+        << (has_bwd_iat ? flow.backward_iat.stddev() : 0.0) << ',';
 
     // IAT Profiles - Flow
-    /* Removed: << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.sum) : std::string("0")) << ',' */
-    out << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.min) : std::string("0")) << ','
-        << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.max) : std::string("0")) << ','
-        << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.mean) : std::string("0")) << ','
-        << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.stddev()) : std::string("0")) << ',';
+    /* Removed: << (has_flow_iat ? flow.flow_iat.sum : 0.0) << ',' */
+    out << (has_flow_iat ? flow.flow_iat.min : 0.0) << ','
+        << (has_flow_iat ? flow.flow_iat.max : 0.0) << ','
+        << (has_flow_iat ? flow.flow_iat.mean : 0.0) << ','
+        << (has_flow_iat ? flow.flow_iat.stddev() : 0.0) << ',';
 
     // TCP/IP Mechanics - TCP Flag Counts
     /* Removed:
@@ -155,16 +153,16 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std
 
     // TCP/IP Mechanics - TCP Flag Rates
     /* Removed:
-           << formatJavaLikeDouble(flow.cwr_flag_count / tp) << ','
-           << formatJavaLikeDouble(flow.ece_flag_count / tp) << ',';
+           << flow.cwr_flag_count / tp << ','
+           << flow.ece_flag_count / tp << ',';
     */
     const double tp = static_cast<double>(total_packets);
-    out << formatJavaLikeDouble(flow.syn_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.ack_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.fin_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.rst_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.psh_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.urg_flag_count / tp) << ',';
+    out << flow.syn_flag_count / tp << ','
+        << flow.ack_flag_count / tp << ','
+        << flow.fin_flag_count / tp << ','
+        << flow.rst_flag_count / tp << ','
+        << flow.psh_flag_count / tp << ','
+        << flow.urg_flag_count / tp << ',';
 
     // TCP/IP Mechanics - Window & Segment (3 features)
     out << flow.init_win_bytes_forward << ','
@@ -176,16 +174,16 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std
         << static_cast<int>(flow.bwd_initial_ttl) << ',';
 
     // Connection States - Active (4 features)
-    out << (has_active ? formatJavaLikeDouble(flow.flow_active.min) : std::string("0")) << ','
-        << (has_active ? formatJavaLikeDouble(flow.flow_active.max) : std::string("0")) << ','
-        << (has_active ? formatJavaLikeDouble(flow.flow_active.mean) : std::string("0")) << ','
-        << (has_active ? formatJavaLikeDouble(flow.flow_active.stddev()) : std::string("0")) << ',';
+    out << (has_active ? flow.flow_active.min : 0.0) << ','
+        << (has_active ? flow.flow_active.max : 0.0) << ','
+        << (has_active ? flow.flow_active.mean : 0.0) << ','
+        << (has_active ? flow.flow_active.stddev() : 0.0) << ',';
 
     // Connection States - Idle (4 features)
-    out << (has_idle ? formatJavaLikeDouble(flow.flow_idle.min) : std::string("0")) << ','
-        << (has_idle ? formatJavaLikeDouble(flow.flow_idle.max) : std::string("0")) << ','
-        << (has_idle ? formatJavaLikeDouble(flow.flow_idle.mean) : std::string("0")) << ','
-        << (has_idle ? formatJavaLikeDouble(flow.flow_idle.stddev()) : std::string("0")) << ',';
+    out << (has_idle ? flow.flow_idle.min : 0.0) << ','
+        << (has_idle ? flow.flow_idle.max : 0.0) << ','
+        << (has_idle ? flow.flow_idle.mean : 0.0) << ','
+        << (has_idle ? flow.flow_idle.stddev() : 0.0) << ',';
 
     // Label
     out << label << '\n';

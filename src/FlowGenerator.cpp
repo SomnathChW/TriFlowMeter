@@ -9,31 +9,7 @@
 #include <cstring>
 #include <utility>
 
-namespace {
 
-uint32_t javaStringHash(const std::string& s) {
-    uint32_t h = 0;
-    for (unsigned char c : s) {
-        h = 31U * h + static_cast<uint32_t>(c);
-    }
-    return h;
-}
-
-uint32_t javaSpreadHash(uint32_t h) {
-    return h ^ (h >> 16);
-}
-
-std::size_t javaHashMapCapacityForPeakSize(std::size_t peak_size) {
-    std::size_t cap = 16;
-    std::size_t threshold = 12;
-    while (peak_size > threshold) {
-        cap <<= 1;
-        threshold = (cap * 3) / 4;
-    }
-    return cap;
-}
-
-}  // namespace
 
 FlowGenerator::FlowKey FlowGenerator::makeFlowKey(const BasicPacketInfo& pkt, bool forward) {
     FlowKey key;
@@ -131,34 +107,11 @@ void FlowGenerator::finishAllFlows() {
         return;
     }
 
-    struct FlushCandidate {
-        std::size_t bucket;
-        uint64_t insertion_order;
-        const BasicFlow* flow;
-    };
-
-    const std::size_t cap = javaHashMapCapacityForPeakSize(peak_current_flows_);
-    std::vector<FlushCandidate> pending;
-    pending.reserve(current_flows_.size());
-
     for (const auto& pair : current_flows_) {
         const ActiveFlowEntry& entry = pair.second;
-        if (entry.flow.packetCount() <= 1) {
-            continue;
+        if (entry.flow.packetCount() > 0) {
+            handleFinishedFlow(entry.flow);
         }
-        const uint32_t spread = javaSpreadHash(javaStringHash(entry.flow.flow_id));
-        pending.push_back(FlushCandidate{static_cast<std::size_t>(spread & static_cast<uint32_t>(cap - 1)), entry.insertion_order, &entry.flow});
-    }
-
-    std::sort(pending.begin(), pending.end(), [](const FlushCandidate& a, const FlushCandidate& b) {
-        if (a.bucket != b.bucket) {
-            return a.bucket < b.bucket;
-        }
-        return a.insertion_order < b.insertion_order;
-    });
-
-    for (const auto& item : pending) {
-        handleFinishedFlow(*item.flow);
     }
 
     current_flows_.clear();
