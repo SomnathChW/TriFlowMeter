@@ -24,52 +24,166 @@ This document provides in-depth architectural documentation for TriFlowMeter, ex
 ## Table of Contents
 
 1. [System Overview](#system-overview)
-2. [Flow Lifecycle](#flow-lifecycle)
+2. [Source File Map](#source-file-map)
 3. [Packet Processing Pipeline](#packet-processing-pipeline)
-4. [Flow Creation](#flow-creation)
-5. [Packet Assignment to Flows](#packet-assignment-to-flows)
-6. [Flow Timeout and Termination](#flow-timeout-and-termination)
-7. [Flow Splitting](#flow-splitting)
-8. [Bidirectional Flow Tracking](#bidirectional-flow-tracking)
-9. [Statistical Computation](#statistical-computation)
-10. [Data Structures](#data-structures)
-11. [Performance Optimizations](#performance-optimizations)
+4. [Flow Lifecycle](#flow-lifecycle)
+5. [Flow Creation](#flow-creation)
+6. [Packet Assignment to Flows](#packet-assignment-to-flows)
+7. [Flow Timeout and Termination](#flow-timeout-and-termination)
+8. [Flow Splitting](#flow-splitting)
+9. [Bidirectional Flow Tracking](#bidirectional-flow-tracking)
+10. [Statistical Computation](#statistical-computation)
+11. [Data Structures](#data-structures)
+12. [CSV Export](#csv-export)
+13. [Live Dashboard](#live-dashboard)
+14. [Execution Modes](#execution-modes)
+15. [Performance Optimizations](#performance-optimizations)
+16. [Thread Safety](#thread-safety)
+17. [Error Handling](#error-handling)
+18. [Platform Support](#platform-support)
 
 ---
 
 ## System Overview
 
-TriFlowMeter follows a pipeline architecture with the following components:
+TriFlowMeter follows a pipeline architecture with seven components:
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌───────────────┐    ┌──────────────┐
-│   Packet     │───▶│   Packet     │───▶│     Flow      │───▶│   Feature    │
-│   Reader     │    │   Decoder    │    │   Generator   │    │  Extraction  │
+│   Packet     │───▶│   Packet     │───▶│     Flow      │───▶│  CSV Writer  │
+│   Reader     │    │   Decoders   │    │   Generator   │    │              │
 └──────────────┘    └──────────────┘    └───────────────┘    └──────────────┘
-                                                │
-                                                ▼
-                                        ┌───────────────┐
-                                        │  CSV Writer   │
-                                        └───────────────┘
+       │                                        │                    │
+       ▼                                        ▼                    ▼
+┌──────────────┐                        ┌───────────────┐    ┌──────────────┐
+│  CLI Options │                        │  Basic Flow   │    │     Live     │
+│              │                        │  (per-flow    │    │  Dashboard   │
+│              │                        │   statistics) │    │              │
+└──────────────┘                        └───────────────┘    └──────────────┘
+                                                                     │
+                                                              ┌──────────────┐
+                                                              │  File Utils  │
+                                                              └──────────────┘
 ```
 
 ### Core Components
 
-1. **PacketReader** (`PacketReader.h/cpp`): Captures packets from PCAP files or live interfaces using libpcap
-2. **PacketDecoders** (`PacketDecoders.h/cpp`): Parses Ethernet, IP, TCP, UDP headers and extracts packet metadata
-3. **FlowGenerator** (`FlowGenerator.h/cpp`): Aggregates packets into bidirectional flows
-4. **BasicFlow** (`BasicFlow.h/cpp`): Represents a single network flow with statistical features
-5. **CSVWriter** (`CSVWriter.h/cpp`): Serializes flow features to CSV format
+| Component | Files | Responsibility |
+|-----------|-------|----------------|
+| **CLIOptions** | `CLIOptions.h/cpp` | Parses command-line arguments, resolves output paths |
+| **PacketReader** | `PacketReader.h/cpp` | Captures packets via libpcap (offline or live) |
+| **PacketDecoders** | `PacketDecoders.h/cpp` | Decodes Ethernet/IPv4/IPv6/TCP/UDP/L2TP headers |
+| **FlowGenerator** | `FlowGenerator.h/cpp` | Aggregates packets into bidirectional flows |
+| **BasicFlow** | `BasicFlow.h/cpp` | Represents a single flow with all statistical features |
+| **CSVWriter** | `CSVWriter.h/cpp` | Serializes 81-column flow records to CSV |
+| **LiveDashboard** | `LiveDashboard.h/cpp` | Real-time terminal UI showing capture progress |
+| **JavaNumberFormat** | `JavaNumberFormat.h/cpp` | Java-compatible double formatting for CSV output |
+| **FileUtils** | `FileUtils.h/cpp` | Fixes file ownership when running under sudo |
+| **BasicPacketInfo** | `BasicPacketInfo.h` | POD struct representing a decoded packet |
+
+---
+
+## Source File Map
+
+```
+TriFlowMeter/
+├── CMakeLists.txt              # Build system (CMake 3.16+, C++17)
+├── include/
+│   ├── BasicFlow.h             # Flow class + RunningStats struct
+│   ├── BasicPacketInfo.h       # Packet struct + PacketStats struct
+│   ├── CLIOptions.h            # CLI structs (CLIOptions, CLIParseResult)
+│   ├── CSVWriter.h             # Static CSV output methods
+│   ├── FileUtils.h             # fixOwnershipIfSudo()
+│   ├── FlowGenerator.h         # FlowKey, FlowKeyHash, ActiveFlowEntry
+│   ├── JavaNumberFormat.h      # javafmt::formatJavaLikeDouble()
+│   ├── LiveDashboard.h         # Terminal dashboard class
+│   ├── PacketDecoders.h        # decodeIPv4/IPv6/L2TP declarations
+│   └── PacketReader.h          # libpcap wrapper (Offline/Live modes)
+└── src/
+    ├── main.cpp                # Entry point, mode dispatch, signal handling
+    ├── BasicFlow.cpp           # Flow statistics, flag checking, active/idle tracking
+    ├── CLIOptions.cpp          # Argument parsing, path resolution
+    ├── CSVWriter.cpp           # 81-column CSV header + row serialization
+    ├── FileUtils.cpp           # chown/chmod under sudo
+    ├── FlowGenerator.cpp       # Flow table, lookup, timeout, finalization
+    ├── JavaNumberFormat.cpp    # Scientific ↔ plain notation conversion
+    ├── LiveDashboard.cpp       # ANSI terminal rendering
+    ├── PacketDecoders.cpp      # IPv4/IPv6/L2TP/TCP/UDP parsing
+    └── PacketReader.cpp        # libpcap open/read loop
+```
+
+---
+
+## Packet Processing Pipeline
+
+Each packet undergoes the following stages:
+
+### 1. Packet Capture (`PacketReader`)
+
+- **Offline**: `pcap_open_offline()` reads PCAP files
+- **Live**: `pcap_open_live()` captures from a network interface (Ethernet/DLT_EN10MB only)
+- **Output**: Raw packet bytes + pcap timestamp (`tv_sec`, `tv_usec`)
+
+### 2. Link-Layer Parsing (`PacketReader::readAll`)
+
+```
+Ethernet Frame
+    └─▶ EtherType check:
+         ├─ 0x0800 (IPv4) → decodeIPv4()
+         ├─ 0x86DD (IPv6) → decodeIPv6()
+         └─ fallback     → decodeL2TP() for VPN/tunnel detection
+```
+
+**Note**: ARP decoding (`decodeArpCompat`) is declared but **disabled** in the current version. ARP packets are counted as discarded.
+
+### 3. Network/Transport Decoding (`PacketDecoders`)
+
+**Extracted into `BasicPacketInfo`**:
+
+| Field | Source |
+|-------|--------|
+| `src_ip`, `dst_ip` | IPv4/IPv6 header (string + raw bytes) |
+| `src_port`, `dst_port` | TCP/UDP header |
+| `protocol` | `6` (TCP) or `17` (UDP) |
+| `timestamp_sec`, `timestamp_usec` | pcap header |
+| `payload_bytes` | IP total length − IP header − transport header |
+| `header_bytes` | TCP data offset × 4 or 8 (UDP) |
+| `tcp_window` | TCP window field |
+| `ip_ttl` | IPv4 TTL or IPv6 Hop Limit |
+| TCP flags | `has_fin`, `has_syn`, `has_rst`, `has_psh`, `has_ack`, `has_urg`, `has_cwr`, `has_ece` |
+
+#### L2TP / VPN Decapsulation
+
+When a packet's outer IP protocol is L2TP (protocol 115), the decoder:
+1. Skips the outer IP header and 6-byte L2TP header
+2. Checks the inner packet's IP version (4 or 6)
+3. Recursively decodes the inner packet via `decodeIPv4()` or `decodeIPv6()`
+4. Increments `PacketStats::vpn_packets`
+
+### 4. Flow Assignment (`FlowGenerator::addPacket`)
+
+The packet is matched to an existing flow or creates a new one (see [Packet Assignment to Flows](#packet-assignment-to-flows)).
+
+### 5. Feature Computation (`BasicFlow::addPacket`)
+
+Real-time statistical updates using `RunningStats`:
+
+- Packet length statistics (fwd, bwd, total)
+- Inter-arrival times (fwd, bwd, flow)
+- TCP flag counters
+- Active/idle period tracking
+
+### 6. Export (`CSVWriter` / `flow_callback_`)
+
+Finished flows are immediately serialized and written via the registered callback.
 
 ---
 
 ## Flow Lifecycle
 
-A network flow in TriFlowMeter progresses through several states:
-
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Created   │────▶│   Active    │────▶│  Finishing  │────▶│  Exported   │
+│   Created   │────▶│   Active    │────▶│  Finishing   │────▶│  Exported   │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
       │                    │                    │
       │                    │                    │
@@ -79,57 +193,10 @@ A network flow in TriFlowMeter progresses through several states:
 
 ### States
 
-1. **Created**: Flow is instantiated when the first packet is encountered
+1. **Created**: Flow is instantiated when the first packet of a new 5-tuple arrives
 2. **Active**: Flow receives and processes subsequent packets
-3. **Finishing**: Flow is marked for termination (FIN flags, RST, timeout)
-4. **Exported**: Flow statistics are written to CSV and removed from memory
-
----
-
-## Packet Processing Pipeline
-
-Each packet undergoes the following processing stages:
-
-### 1. Packet Capture
-
-- **Source**: PCAP file or live network interface
-- **Library**: libpcap
-- **Output**: Raw packet data with timestamp
-
-### 2. Packet Decoding
-
-```cpp
-// PacketDecoders.cpp: parsePacket()
-Ethernet Frame
-    └─▶ IP Header (IPv4/IPv6)
-         └─▶ Transport Header (TCP/UDP)
-              └─▶ Payload
-```
-
-**Extracted Information**:
-
-- Source/Destination IP addresses (IPv4/IPv6)
-- Source/Destination ports
-- Protocol (TCP=6, UDP=17)
-- Timestamp (seconds + microseconds)
-- Payload size
-- Header size
-- TCP flags (SYN, ACK, FIN, RST, PSH, URG, CWR, ECE)
-- TCP window size
-
-### 3. Flow Assignment
-
-The packet is matched to an existing flow or creates a new one (detailed in next section).
-
-### 4. Feature Computation
-
-Real-time statistical updates:
-
-- Running statistics (mean, variance, min, max)
-- Inter-arrival times
-- Flag counters
-- Bulk transfer detection
-- Subflow tracking
+3. **Finishing**: Flow is marked as `finished = true` (FIN+FIN or RST or flow timeout)
+4. **Exported**: Flow statistics are written to CSV and removed from the flow table
 
 ---
 
@@ -137,144 +204,91 @@ Real-time statistical updates:
 
 ### When Flows are Created
 
-A new flow is created when:
-
-1. **First packet from a new 5-tuple** arrives
-2. **Flow timeout expires** and a new packet arrives for the same 5-tuple (flow splits)
+1. **First packet from a new 5-tuple** — no matching forward or backward key exists
+2. **Flow timeout expires** — the old flow is exported and a new flow begins for the same 5-tuple
 
 ### Flow Initialization
 
-```cpp
-// BasicFlow.cpp: Constructor
-BasicFlow::BasicFlow(const BasicPacketInfo& pkt, uint64_t activity_timeout) {
-    // Set flow identifiers
-    flow_id = pkt.fwdFlowId();  // src_ip-dst_ip-src_port-dst_port-protocol
-    src_ip = pkt.src_ip;
-    dst_ip = pkt.dst_ip;
-    src_port = pkt.src_port;
-    dst_port = pkt.dst_port;
-    protocol = pkt.protocol;
+The constructor `BasicFlow(pkt, activity_timeout_micros)`:
 
-    // Initialize timestamps
-    start_time_sec = pkt.timestamp_sec;
-    start_time_usec = pkt.timestamp_usec;
-    flow_start_time = toMicros(pkt.timestamp_sec, pkt.timestamp_usec);
+- Assigns the flow ID from `pkt.fwdFlowId()`
+- Records `src_ip`, `dst_ip`, `src_port`, `dst_port`, `protocol`
+- Initializes all timestamps from the first packet
+- Processes the first packet as a forward packet:
+  - Sets `fwd_initial_ttl`, `init_win_bytes_forward`, `min_seg_size_forward`
+  - Adds payload bytes to `fwd_pkt_stats` and `flow_length_stats`
+  - Increments `forward_packets`, `forward_bytes`
+- Checks for RST (immediate finish) or FIN (sets `fwd_fin_flags`)
 
-    // Process first packet
-    // - Determine direction (forward/backward)
-    // - Update packet counters
-    // - Initialize statistics
-    // - Check TCP flags
-}
-```
-
-### Flow Identification
-
-**Flow ID Format**: `{src_ip}-{dst_ip}-{src_port}-{dst_port}-{protocol}`
-
-**Bidirectional Matching**:
-
-- Forward key: `(src_ip, dst_ip, src_port, dst_port, protocol)`
-- Backward key: `(dst_ip, src_ip, dst_port, src_port, protocol)`
-
-Both directions map to the same flow.
+A second constructor `BasicFlow(pkt, old_src_ip, old_dst_ip, old_src_port, old_dst_port, ...)` exists for flow splits, preserving the original source/destination orientation.
 
 ---
 
 ## Packet Assignment to Flows
 
-### Flow Key Generation
+### Flow Key
 
 ```cpp
-// FlowGenerator.cpp: makeFlowKey()
-FlowKey {
-    array<uint8_t, 16> src;    // IP address bytes
-    array<uint8_t, 16> dst;    // IP address bytes
+struct FlowKey {
+    array<uint8_t, 16> src;   // Raw IP bytes (4 for IPv4, 16 for IPv6)
+    array<uint8_t, 16> dst;
     uint16_t src_port;
     uint16_t dst_port;
     uint8_t protocol;
-    uint8_t addr_len;          // 4 for IPv4, 16 for IPv6
-}
+    uint8_t addr_len;         // 4 or 16
+};
 ```
 
 ### Lookup Process
 
-```cpp
-// FlowGenerator.cpp: addPacket()
+```
 1. Generate forward flow key from packet
 2. Search hash table for forward key
 3. If not found:
-   a. Generate backward flow key
+   a. Generate backward flow key (src ↔ dst swapped)
    b. Search hash table for backward key
 4. If found (forward or backward):
-   a. Check flow timeout
-   b. If timeout exceeded → split flow
-   c. Else → add packet to existing flow
+   a. Compute elapsed time since flow start
+   b. If timeout exceeded → export current flow, create new flow (split)
+   c. Else → call flow.addPacket(pkt), check if finished
 5. If not found:
-   a. Create new flow
+   a. Create new BasicFlow from packet
    b. Insert into hash table with forward key
 ```
 
-### Hash Table
+### Hash Function
 
-- **Type**: `std::unordered_map<FlowKey, ActiveFlowEntry>`
-- **Hash Function**: FNV-1a hash over flow key fields
-- **Collision Resolution**: Chaining (standard library)
+FNV-1a hash over all `FlowKey` fields for deterministic, fast hashing.
 
 ---
 
 ## Flow Timeout and Termination
 
-### Timeout Types
+### Flow Timeout (Default: 120 seconds)
 
-#### 1. Flow Timeout (Default: 120 seconds)
-
-- **Purpose**: Split long-lived flows into manageable segments
+- **Purpose**: Split long-lived flows into bounded segments
 - **Trigger**: `(packet_time - flow_start_time) > flow_timeout`
 - **Action**:
-    1. Export current flow if packet count > 1
-    2. Create new flow with same 5-tuple
-    3. Preserve flow ID for continuity
+  1. Export the current flow (if `packetCount() > 0`)
+  2. Create a new flow with the same 5-tuple and preserved flow ID
+  3. Replace the entry in the hash table
 
-```cpp
-// FlowGenerator.cpp: addPacket()
-if ((pkt_time - flow_start) > flow_timeout_) {
-    // Save old flow metadata
-    std::string old_flow_id = flow.flow_id;
-
-    // Export finished flow
-    if (flow.packetCount() > 1) {
-        handleFinishedFlow(flow);
-    }
-
-    // Create new flow (split)
-    BasicFlow new_flow(pkt, old_src_ip, old_dst_ip, old_src_port, old_dst_port);
-    new_flow.flow_id = old_flow_id;  // Keep same ID
-
-    // Replace in hash table
-    current_flows_[key] = new_flow;
-}
-```
-
-#### 2. Activity Timeout (Default: 5 seconds)
+### Activity Timeout (Default: 5 seconds)
 
 - **Purpose**: Track active/idle periods within a flow
 - **Trigger**: `(current_time - end_active_time) > activity_timeout`
-- **Action**: Update active/idle statistics
+- **Action**: Record the ending active period duration, record the idle period duration, start a new active period
 
 ```cpp
 // BasicFlow.cpp: updateActiveIdleTime()
 if ((current_time - end_active_time) > threshold) {
-    // Record active period
     if ((end_active_time - start_active_time) > 0) {
         flow_active.add(end_active_time - start_active_time);
     }
-
-    // Record idle period
     flow_idle.add(current_time - end_active_time);
-
-    // Start new active period
     start_active_time = current_time;
+    end_active_time = current_time;
+} else {
     end_active_time = current_time;
 }
 ```
@@ -293,50 +307,28 @@ if (pkt.has_rst) {
 
 ```cpp
 if (pkt.has_fin) {
-    if (is_forward) {
-        fwd_fin_flags = 1;
-    } else {
-        bwd_fin_flags = 1;
-    }
+    if (is_forward)  fwd_fin_flags = 1;
+    else             bwd_fin_flags = 1;
 
-    // Both directions sent FIN
     if (fwd_fin_flags + bwd_fin_flags == 2) {
-        finished = true;
+        finished = true;  // Both directions sent FIN
     }
 }
 ```
 
-### Flow Finalization
+### Flow Finalization (`finishAllFlows`)
 
-```cpp
-// FlowGenerator.cpp: finishAllFlows()
-// Called at end of capture
-for (auto& [key, entry] : current_flows_) {
-    if (entry.flow.packetCount() > 1) {
-        handleFinishedFlow(entry.flow);
-    }
-}
-```
+Called at the end of capture to export all remaining active flows:
 
-**Export Order**: Flows are sorted by:
-
-1. Hash bucket (Java-compatible HashMap behavior)
-2. Insertion order (stable ordering)
+- Flows with `packetCount() <= 1` are skipped (insufficient data for statistics)
+- Remaining flows are sorted by Java-compatible HashMap bucket order and insertion order for deterministic output
+- Uses `javaStringHash()` and `javaSpreadHash()` to compute bucket indices against a capacity derived from `peak_current_flows_`
 
 ---
 
 ## Flow Splitting
 
 Flows are **split** (not closed) when the flow timeout expires. This creates distinct flow records for the same connection.
-
-### Why Split Flows?
-
-1. **Memory Management**: Prevent unbounded flow growth
-2. **Analysis Windows**: Enable time-window-based analysis
-3. **Stationarity**: Capture changing behavior over time
-4. **Dataset Compatibility**: Match CICFlowMeter behavior
-
-### Split Mechanism
 
 ```
 Original Flow:
@@ -355,10 +347,10 @@ After Timeout (120s):
 
 **Key Properties**:
 
-- Same flow_id maintained
-- Statistics reset for new flow
-- Both flows appear in CSV output
-- Packet counts restart from 1
+- Same `flow_id` maintained across splits
+- Statistics reset for the new flow
+- Both flow segments appear in CSV output
+- Source/destination orientation is preserved from the original flow
 
 ---
 
@@ -367,176 +359,74 @@ After Timeout (120s):
 ### Direction Determination
 
 ```cpp
-// BasicFlow.cpp: addPacket()
 bool is_forward = (src_ip == pkt.src_ip);
-
-if (is_forward) {
-    // Forward direction: client → server
-    forward_packets++;
-    forward_bytes += pkt.payload_bytes;
-    fwd_pkt_stats.add(pkt.payload_bytes);
-    // ...
-} else {
-    // Backward direction: server → client
-    backward_packets++;
-    backward_bytes += pkt.payload_bytes;
-    bwd_pkt_stats.add(pkt.payload_bytes);
-    // ...
-}
 ```
 
-### Forward Direction
+The **first packet** establishes the forward direction. All subsequent packets from the same source IP are "forward"; packets from the opposite endpoint are "backward".
 
-The **first packet** establishes the forward direction:
+### Separate Statistics per Direction
 
-- Forward source IP/port = flow's src_ip/src_port
-- All subsequent packets from this endpoint are "forward"
-
-### Backward Direction
-
-Packets from the opposite endpoint:
-
-- Backward source = flow's destination
-- Response packets, ACKs, server data
-
-### Separate Statistics
-
-Each direction maintains:
-
-- Packet count
-- Byte count
-- Packet length statistics (min, max, mean, std)
-- Inter-arrival times (IAT)
-- Header byte count
-- PSH/URG flag counts
-- TCP window size (initial)
+| Tracked per direction | Forward | Backward |
+|----------------------|---------|----------|
+| Packet count | `forward_packets` | `backward_packets` |
+| Byte count (payload) | `forward_bytes` | `backward_bytes` |
+| Header byte count | `f_header_bytes` | `b_header_bytes` |
+| Packet length stats | `fwd_pkt_stats` | `bwd_pkt_stats` |
+| Inter-arrival times | `forward_iat` | `backward_iat` |
+| Active data packets | `act_data_pkt_forward` | `act_data_pkt_backward` |
+| Initial TCP window | `init_win_bytes_forward` | `init_win_bytes_backward` |
+| Initial TTL | `fwd_initial_ttl` | `bwd_initial_ttl` |
+| FIN tracking | `fwd_fin_flags` | `bwd_fin_flags` |
 
 ---
 
 ## Statistical Computation
 
-### Running Statistics Algorithm (Welford's)
+### Running Statistics (Welford's Algorithm)
 
-Computes mean and variance in a single pass without storing all values:
+Computes mean and standard deviation in a single pass without storing individual values:
 
 ```cpp
 struct RunningStats {
-    uint64_t n = 0;        // Count
-    double mean = 0.0;     // Running mean
+    uint64_t n = 0;
+    double mean = 0.0;
     double m2 = 0.0;       // Sum of squared deviations
-    double sum = 0.0;      // Total sum
+    double sum = 0.0;
     double min = 0.0;
     double max = 0.0;
 
     void add(double v) {
+        if (n == 0) { min = v; max = v; }
         n++;
         double dev = v - mean;
         mean += dev / n;
-        m2 += (n - 1) * dev * (dev / n);
+        m2 += (n - 1.0) * dev * (dev / n);
         sum += v;
-        min = (n == 1) ? v : std::min(min, v);
-        max = (n == 1) ? v : std::max(max, v);
-    }
-
-    double variance() const {
-        return (n > 1) ? m2 / (n - 1) : 0.0;
+        if (v < min) min = v;
+        if (v > max) max = v;
     }
 
     double stddev() const {
-        return std::sqrt(variance());
+        if (n <= 1) return 0.0;
+        const double var = m2 / (n - 1);
+        return var > 0.0 ? sqrt(var) : 0.0;
     }
 };
 ```
 
+Used for: `fwd_pkt_stats`, `bwd_pkt_stats`, `flow_length_stats`, `forward_iat`, `backward_iat`, `flow_iat`, `flow_active`, `flow_idle`.
+
 ### Inter-Arrival Time (IAT)
 
 ```cpp
-// Time between consecutive packets in same direction
+// Forward IAT: only recorded when forward_packets > 0
 if (forward_packets > 0) {
-    uint64_t iat = current_timestamp - forward_last_seen;
-    forward_iat.add(static_cast<double>(iat));
+    forward_iat.add(current_timestamp - forward_last_seen);
 }
 forward_last_seen = current_timestamp;
 ```
 
-### Subflow Detection
-
-Detects activity bursts separated by > 1 second idle periods:
-
-```cpp
-// BasicFlow.cpp: detectUpdateSubflows()
-void detectUpdateSubflows(const BasicPacketInfo& pkt) {
-    uint64_t ts = packetTimeMicros(pkt);
-
-    if (sf_last_packet_ts == -1) {
-        sf_last_packet_ts = ts;
-        sf_ac_helper = ts;
-        return;
-    }
-
-    // Gap > 1 second → new subflow
-    if ((ts - sf_last_packet_ts) / 1000000.0 > 1.0) {
-        sf_count++;
-        updateActiveIdleTime(ts, activity_timeout);
-        sf_ac_helper = ts;
-    }
-
-    sf_last_packet_ts = ts;
-}
-```
-
-### Bulk Transfer Detection
-
-Identifies sustained data transfers (4+ consecutive packets with < 1s gaps):
-
-```cpp
-// BasicFlow.cpp: updateBackwardBulk()
-void updateBackwardBulk(const BasicPacketInfo& pkt) {
-    uint64_t size = pkt.payload_bytes;
-    if (size == 0) return;
-
-    uint64_t ts = packetTimeMicros(pkt);
-
-    if (bbulk_start_helper == 0) {
-        // First packet in potential bulk
-        bbulk_start_helper = ts;
-        bbulk_packet_count_helper = 1;
-        bbulk_size_helper = size;
-    } else {
-        if ((ts - blast_bulk_ts) / 1000000.0 > 1.0) {
-            // Gap too large, reset
-            bbulk_start_helper = ts;
-            bbulk_packet_count_helper = 1;
-            bbulk_size_helper = size;
-        } else {
-            bbulk_packet_count_helper++;
-            bbulk_size_helper += size;
-
-            if (bbulk_packet_count_helper == 4) {
-                // Bulk detected
-                bbulk_state_count++;
-                bbulk_packet_count += 4;
-                bbulk_size_total += bbulk_size_helper;
-                bbulk_duration += ts - bbulk_start_helper;
-            } else if (bbulk_packet_count_helper > 4) {
-                // Continue existing bulk
-                bbulk_packet_count++;
-                bbulk_size_total += size;
-                bbulk_duration += ts - blast_bulk_ts;
-            }
-        }
-    }
-
-    blast_bulk_ts = ts;
-}
-```
-
-**Bulk Metrics**:
-
-- Bulk state count: Number of bulk transfer sequences
-- Bulk packet count: Total packets in all bulks
-- Bulk size total: Total bytes in all bulks
-- Bulk duration: Total time spent in bulk transfers
+Same logic applies for backward IAT and flow-level IAT.
 
 ---
 
@@ -548,113 +438,151 @@ Represents a single decoded packet:
 
 ```cpp
 struct BasicPacketInfo {
-    std::string src_ip, dst_ip;          // IP addresses as strings
-    uint8_t src_bytes[16], dst_bytes[16]; // Raw IP bytes
-    int addr_len;                         // 4 (IPv4) or 16 (IPv6)
+    std::string src_ip, dst_ip;
+    uint8_t src_bytes[16], dst_bytes[16];   // Raw IP bytes for key generation
+    int addr_len;                            // 4 (IPv4) or 16 (IPv6)
     uint16_t src_port, dst_port;
     uint8_t protocol;
     uint32_t timestamp_sec, timestamp_usec;
-    uint32_t payload_bytes;               // L4 payload
-    uint32_t header_bytes;                // L2+L3+L4 headers
+    uint32_t payload_bytes;                  // Transport payload
+    uint32_t header_bytes;                   // Transport header size
     bool has_fin, has_syn, has_rst, has_psh, has_ack, has_urg, has_cwr, has_ece;
     int tcp_window;
+    uint8_t ip_ttl;
 
-    std::string fwdFlowId() const;        // src-dst flow ID
-    std::string bwdFlowId() const;        // dst-src flow ID
-    std::string generateFlowId() const;   // Canonical flow ID
+    std::string generateFlowId() const;     // Canonical (sorted) flow ID
+    std::string fwdFlowId() const;           // src→dst flow ID
+    std::string bwdFlowId() const;           // dst→src flow ID
 };
 ```
 
-### BasicFlow
-
-Complete flow statistics:
+### PacketStats
 
 ```cpp
-class BasicFlow {
-public:
-    // Identifiers
-    std::string flow_id;
-    std::string src_ip, dst_ip;
-    uint16_t src_port, dst_port;
-    uint8_t protocol;
-
-    // Timestamps
-    uint32_t start_time_sec, start_time_usec;
-    uint32_t last_seen_sec, last_seen_usec;
-    uint64_t flow_start_time, flow_last_seen;
-
-    // Packet/Byte counts
-    int forward_packets, backward_packets;
-    uint64_t forward_bytes, backward_bytes;
-    uint64_t f_header_bytes, b_header_bytes;
-
-    // TCP flags
-    int fin_flag_count, syn_flag_count, rst_flag_count;
-    int psh_flag_count, ack_flag_count, urg_flag_count;
-    int cwr_flag_count, ece_flag_count;
-    int f_psh_cnt, b_psh_cnt;
-    int f_urg_cnt, b_urg_cnt;
-
-    // Running statistics
-    RunningStats fwd_pkt_stats;      // Forward packet lengths
-    RunningStats bwd_pkt_stats;      // Backward packet lengths
-    RunningStats flow_iat;            // Flow inter-arrival times
-    RunningStats forward_iat;         // Forward IAT
-    RunningStats backward_iat;        // Backward IAT
-    RunningStats flow_length_stats;   // All packet lengths
-    RunningStats flow_active;         // Active period durations
-    RunningStats flow_idle;           // Idle period durations
-
-    // Subflow tracking
-    uint64_t sf_last_packet_ts;
-    int sf_count;
-
-    // Bulk transfer tracking (forward and backward)
-    uint64_t fbulk_duration, fbulk_packet_count, fbulk_size_total, fbulk_state_count;
-    uint64_t bbulk_duration, bbulk_packet_count, bbulk_size_total, bbulk_state_count;
-
-    // Other
-    int init_win_bytes_forward, init_win_bytes_backward;
-    uint64_t act_data_pkt_forward;    // Forward packets with payload
-    uint64_t min_seg_size_forward;
-    bool finished;
-
-    void addPacket(const BasicPacketInfo& pkt);
-    // ... 30+ getter methods for computed features
+struct PacketStats {
+    long long total = 0;
+    long long valid = 0;
+    long long discarded = 0;
+    long long vpn_packets = 0;
 };
 ```
 
-### FlowGenerator
-
-Manages active flows:
+### FlowGenerator Internals
 
 ```cpp
 class FlowGenerator {
-private:
-    struct FlowKey {
-        array<uint8_t, 16> src, dst;
-        uint16_t src_port, dst_port;
-        uint8_t protocol, addr_len;
-    };
-
-    struct ActiveFlowEntry {
-        BasicFlow flow;
-        uint64_t insertion_order;  // For deterministic export ordering
-    };
-
-    unordered_map<FlowKey, ActiveFlowEntry> current_flows_;
-    vector<BasicFlow> finished_flows_;
+    unordered_map<FlowKey, ActiveFlowEntry, FlowKeyHash> current_flows_;
+    vector<BasicFlow> finished_flows_;             // Optional storage
     function<void(const BasicFlow&)> flow_callback_;
-
-    uint64_t flow_timeout_;              // 120s default
-    uint64_t activity_timeout_micros_;   // 5s default
-
-public:
-    void addPacket(const BasicPacketInfo& pkt);
-    void finishAllFlows();
-    void setFlowCallback(function<void(const BasicFlow&)> callback);
+    bool store_finished_flows_;
+    int finished_flow_count_;
+    uint64_t flow_timeout_;                        // Microseconds
+    uint64_t activity_timeout_micros_;             // Microseconds
+    uint64_t next_insertion_order_;                 // Monotonic counter
+    size_t peak_current_flows_;                     // For finalization ordering
 };
 ```
+
+---
+
+## CSV Export
+
+### Header
+
+The CSV header is written by `CSVWriter::writeHeader()` as a fixed 81-column string. See [FEATURES.md](FEATURES.md) for the complete column listing.
+
+### Row Serialization
+
+`CSVWriter::writeFlowRow()` serializes a `BasicFlow` into a single CSV row:
+
+- Flows with `packetCount() <= 0` are silently skipped (returns `false`)
+- Integer fields are written directly
+- Floating-point fields use `javafmt::formatJavaLikeDouble()` for Java-compatible formatting:
+  - Values in `[1e-3, 1e7)` are written in plain notation (e.g., `1234.5`)
+  - Values outside this range use scientific notation with Java-style exponents (e.g., `1.5E8`)
+  - Whole-number doubles include `.0` suffix (e.g., `42.0`)
+  - NaN → `"NaN"`, ±Infinity → `"Infinity"` / `"-Infinity"`
+
+### Export-Time Computed Features
+
+Three ratio features are computed at export time in `writeFlowRow()` rather than tracked incrementally:
+
+1. **Payload Ratio** = `backward_bytes / forward_bytes`
+2. **Packet Count Ratio** = `backward_packets / forward_packets`
+3. **Header-to-Total Ratio** = `total_header_bytes / (total_bytes + total_header_bytes)`
+
+---
+
+## Live Dashboard
+
+`LiveDashboard` provides a real-time terminal UI using ANSI escape codes:
+
+### Layout
+
+```
++--------------------------------------------------------------------------------+
+| Source: eth0           | Uptime: 00:05:32       | Packets: 1.2M                |
++------------------------+------------------------+------------------------------+
+| Valid: 1.1M            | Discarded: 45.2K       | Written Flows: 8.5K         |
++------------------------+-------------------------------------------------------+
+| Active Flows: 342      | CSV Output: /path/to/output_flows.csv                 |
++--------------------------------------------------------------------------------+
+```
+
+### Features
+
+- ASCII art banner displayed on first render (TriFlowMeter logo)
+- 250ms refresh throttle (via `forceRefresh()` / `refreshIfDue()`)
+- In-place terminal updates using cursor movement escape codes (`\033[nA`, `\033[2K`)
+- Human-readable count formatting: K (thousands), M (millions), G (billions)
+- Tracks: total/valid/discarded packets, VPN packets, written flows, active flows, uptime
+
+---
+
+## Execution Modes
+
+`main.cpp` dispatches into three execution modes based on CLI flags:
+
+### 1. Stdout Mode (`--stdout`)
+
+- Writes CSV header + rows to `stdout`
+- Progress messages go to `stderr`
+- No dashboard, no file output
+- Flows are not stored in memory (`setStoreFinishedFlows(false)`)
+- Ideal for piping into downstream tools
+
+### 2. Live Capture (`--live <interface>`)
+
+- Requires root/admin privileges
+- Opens live pcap handle with `pcap_open_live()`
+- Registers signal handlers for `SIGINT`/`SIGTERM` to gracefully stop capture
+- Displays LiveDashboard on terminal
+- Streams flows to CSV file as they finish
+- 250ms UI tick for dashboard updates
+
+### 3. Offline Mode (default)
+
+- Reads a PCAP file
+- Displays LiveDashboard with progress
+- Streams flows to CSV file
+- On completion: final statistics printed
+
+### Signal Handling
+
+- `SIGINT` and `SIGTERM` set a `volatile sig_atomic_t g_stop_capture` flag
+- The packet read loop checks this flag between packets
+- Allows graceful shutdown during live capture
+
+### Output Path Resolution (`resolveCsvPath`)
+
+| Scenario | Output |
+|----------|--------|
+| No output specified (offline) | `{pcap_stem}_Flow.csv` (legacy naming) |
+| No output specified (live) | `{interface}_flows.csv` |
+| Output is directory or has no extension | `{directory}/{stem}_flows.csv` |
+| Output is a file path | Used as-is |
+
+All output directories are created automatically. File ownership is restored to `SUDO_UID`/`SUDO_GID` when running under sudo.
 
 ---
 
@@ -662,42 +590,38 @@ public:
 
 ### 1. Hash Table Efficiency
 
-- **Custom Hash**: FNV-1a for deterministic, fast hashing
-- **Key Design**: Fixed-size arrays avoid dynamic allocation
-- **Reserve Capacity**: Pre-allocate based on expected flow count
+- **Custom FNV-1a hash**: Deterministic, fast hashing over fixed-size `FlowKey` arrays
+- **Fixed-size keys**: No dynamic allocation in hot path
+- **Binary IP comparison**: Uses raw bytes, not string comparison
 
-### 2. Zero-Copy Processing
+### 2. Zero-Copy Packet Parsing
 
-- Packet data accessed directly from libpcap buffer
-- No intermediate copies for header parsing
-- String IP addresses cached per flow
+- Packet data accessed directly from libpcap buffer via `reinterpret_cast`
+- No intermediate buffer copies for header parsing
+- String IP addresses created once per flow, not per packet
 
 ### 3. Streaming Architecture
 
-- Flows exported immediately upon completion
+- Flows exported immediately upon completion via callback
+- `store_finished_flows_` can be disabled to prevent memory accumulation
 - Bounded memory usage regardless of capture duration
-- CSV written incrementally, no buffering
 
 ### 4. Welford's Algorithm
 
-- Single-pass statistics computation
+- Single-pass statistics computation (mean, stddev) — no per-packet storage
 - No storage of individual packet values
-- O(1) per-packet complexity for mean/variance
+- O(1) per-packet complexity for statistical updates
 
 ### 5. Compiler Optimizations
 
 ```cmake
 -O3                  # Maximum optimization
--march=native        # CPU-specific instructions
--flto                # Link-time optimization
+-march=native        # CPU-specific instructions (optional, enabled by default)
+-flto                # Link-time optimization (Release builds)
 -DNDEBUG             # Disable assertions
 ```
 
-### 6. Bulk Detection Optimization
-
-- Uses object identity comparison (Java compatibility)
-- Always processes backward bulk to avoid byte array comparison
-- Tracks helper variables to minimize recomputation
+Controlled by `TRIFLOWMETER_ENABLE_NATIVE_OPT` CMake option.
 
 ---
 
@@ -705,31 +629,9 @@ public:
 
 **Current Design**: Single-threaded
 
-- PacketReader → FlowGenerator → CSVWriter runs in one thread
+- `PacketReader → FlowGenerator → CSVWriter` runs on the main thread
 - No mutex/lock overhead
-- Suitable for live capture (I/O bound) and offline processing
-
-**Future Enhancement**: Multi-threaded packet processing with per-thread flow tables
-
----
-
-## Compatibility
-
-### CICFlowMeter Compatibility
-
-TriFlowMeter maintains compatibility with CICFlowMeter output:
-
-1. **Same 84 CSV columns** in identical order
-2. **Java-compatible flow ID hashing** for deterministic export order
-3. **Identical feature computation** (including quirks like bulk detection)
-4. **Same default timeouts** (120s flow, 5s activity)
-
-### Deviations from CICFlowMeter
-
-1. **Performance**: 10-100x faster due to C++ implementation
-2. **Memory**: More efficient with streaming architecture
-3. **Bugs Fixed**: Corrected several statistical computation errors
-4. **Platform Support**: Native Windows/Linux/macOS builds
+- Live dashboard rendering happens synchronously within the packet loop callbacks
 
 ---
 
@@ -739,37 +641,48 @@ TriFlowMeter maintains compatibility with CICFlowMeter output:
 
 Packets are discarded if:
 
-- Cannot parse Ethernet/IP/Transport headers
-- Unsupported protocol (not TCP/UDP)
-- Malformed headers (length mismatches)
+- Ethernet frame is too short for an Ethernet header
+- IP header cannot be parsed (insufficient bytes)
+- Transport protocol is not TCP or UDP (and not L2TP-encapsulated)
+- L2TP decapsulation fails
 
-Discarded packets increment `stats.discarded` but don't affect flows.
+Discarded packets increment `PacketStats::discarded` but do not affect flows.
 
-### Flow Validation
+### Flow Export Validation
 
-Flows with `packetCount() <= 1` are not exported (insufficient data for statistics).
+- `writeFlowRow()` silently skips flows with `packetCount() <= 0`
+- `finishAllFlows()` skips flows with `packetCount() <= 1`
 
-### Timeout Edge Cases
+### Live Capture Constraints
 
-If packet timestamps go backwards (non-monotonic), flows may be created with negative durations. In practice, libpcap guarantees monotonic timestamps.
+- Only Ethernet interfaces (`DLT_EN10MB`) are supported for live capture
+- Non-Ethernet interfaces cause an immediate error on `open()`
 
 ---
 
-## Future Enhancements
+## Platform Support
 
-1. **ICMP Support**: Add ICMP flow tracking
-2. **IPv6 Flow Labels**: Utilize IPv6 flow label field
-3. **Application Layer**: Deep packet inspection for protocols (HTTP, DNS, TLS)
-4. **Machine Learning**: Embedded classification models
-5. **Distributed Processing**: Cluster-based high-speed analysis
-6. **Database Export**: Direct output to ClickHouse, PostgreSQL, etc.
+### Build System
+
+- **CMake 3.16+** with C++17 (`CMAKE_CXX_STANDARD 17`)
+- **Compilers**: GCC 7+, Clang 6+, MSVC 2017+
+- **Dependency**: libpcap (Linux/macOS) or Npcap/WinPcap (Windows)
+
+### Platform-Specific Code
+
+| Component | Linux/macOS | Windows |
+|-----------|-------------|---------|
+| Network headers | `<netinet/ip.h>`, `<netinet/tcp.h>`, etc. | Custom struct definitions |
+| Ethernet header | `<netinet/if_ether.h>` | Custom `ether_header` struct |
+| Pcap library | `libpcap` | `wpcap` + `Packet` + `ws2_32` |
+| File ownership | `chown()` via SUDO_UID/GID | Not applicable |
 
 ---
 
 ## References
 
 - **Welford's Algorithm**: Donald Knuth, _The Art of Computer Programming_, Vol 2
-- **FNV Hash**: [http://www.isthe.com/chongo/tech/comp/fnv/](http://www.isthe.com/chongo/tech/comp/fnv/)
+- **FNV-1a Hash**: [http://www.isthe.com/chongo/tech/comp/fnv/](http://www.isthe.com/chongo/tech/comp/fnv/)
 - **CICFlowMeter**: Canadian Institute for Cybersecurity
 - **libpcap**: [https://www.tcpdump.org/](https://www.tcpdump.org/)
 

@@ -61,15 +61,8 @@ struct RunningStats {
         if (n <= 1) {
             return 0.0;
         }
-        const double var = variance();
+        const double var = m2 / static_cast<double>(n - 1);
         return var > 0.0 ? std::sqrt(var) : 0.0;
-    }
-
-    double variance() const {
-        if (n <= 1) {
-            return 0.0;
-        }
-        return m2 / static_cast<double>(n - 1);
     }
 };
 

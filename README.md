@@ -3,7 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 > **Note:**
-> CICFlowMeter Compatible output is only valid till v0.0.1. If you need compatibilty, use version v0.0.1.
+> CICFlowMeter Compatible output is only valid till v0.0.1. If you need compatibility, use version v0.0.1.
 
 TriFlowMeter is a high-performance network flow analyzer that extracts statistical features from network traffic for machine learning applications, intrusion detection, and network behavior analysis. It processes PCAP files or captures live network traffic and generates comprehensive flow-level statistics in CSV format.
 
@@ -13,14 +13,16 @@ TriFlowMeter converts raw packet data into bidirectional network flows with rich
 
 ### Key Features
 
-- **High-Performance Processing**: Optimized C++17 implementation with optional CPU-specific optimizations
-- **Dual Mode Operation**: Process PCAP files or capture live network traffic
-- **Comprehensive Flow Statistics**: Extracts 83+ features per flow including timing, size, flags, and behavioral metrics
-- **Bidirectional Flow Analysis**: Tracks forward and backward packet statistics separately
-- **Real-time Dashboard**: Live monitoring interface with packet/flow statistics
-- **Streaming Output**: Continuous CSV output for online analysis
-- **Subflow Detection**: Automatic detection of activity periods within flows
-- **Bulk Transfer Analysis**: Identifies and characterizes bulk data transfers
+- **High-Performance C++17**: Optimized with `-O3`, `-march=native`, and link-time optimization
+- **Dual Mode Operation**: Process PCAP files (offline) or capture live network traffic
+- **81-Column CSV Output**: Extracts 81 features per flow covering timing, size, flags, ratios, and behavioral metrics
+- **Bidirectional Flow Analysis**: Tracks forward and backward packet statistics independently
+- **Real-Time Dashboard**: Live terminal UI showing packet counts, flow progress, and uptime
+- **Streaming Output**: `--stdout` mode for piping into downstream tools
+- **IPv4 + IPv6 + L2TP**: Handles IPv4, IPv6, and L2TP/VPN-encapsulated packets
+- **Active/Idle Detection**: Tracks activity periods within flows using configurable timeouts
+- **Java-Compatible Formatting**: CSV numeric output matches CICFlowMeter conventions
+- **Sudo-Aware**: Automatically restores file ownership when running under `sudo`
 
 ## License
 
@@ -61,11 +63,17 @@ cmake ..
 make -j$(nproc)
 ```
 
-For optimized builds:
+For optimized builds (default is Release with native optimizations):
 
 ```bash
 cmake -DCMAKE_BUILD_TYPE=Release -DTRIFLOWMETER_ENABLE_NATIVE_OPT=ON ..
 make -j$(nproc)
+```
+
+To disable CPU-specific optimizations (for portable binaries):
+
+```bash
+cmake -DCMAKE_BUILD_TYPE=Release -DTRIFLOWMETER_ENABLE_NATIVE_OPT=OFF ..
 ```
 
 ## Usage
@@ -73,56 +81,116 @@ make -j$(nproc)
 ### PCAP File Analysis
 
 ```bash
-./triflowmeter input.pcap -o output.csv
+# Output to auto-named file (input_Flow.csv)
+./triflowmeter input.pcap
+
+# Output to a specific file
+./triflowmeter input.pcap output.csv
+
+# Output to a directory (creates dir/input_flows.csv)
+./triflowmeter input.pcap results/
 ```
 
 ### Live Capture
 
 ```bash
-sudo ./triflowmeter -i eth0 -o live_flows.csv
+# Capture from interface, output to auto-named file
+sudo ./triflowmeter --live eth0
+
+# Capture with explicit output path
+sudo ./triflowmeter --live eth0 live_flows.csv
+
+# Capture with a label for all flows
+sudo ./triflowmeter --live eth0 output.csv --label Benign
 ```
 
 ### Streaming to stdout
 
 ```bash
-./triflowmeter input.pcap --stdout
+# Pipe CSV rows to another tool
+./triflowmeter input.pcap --stdout | python3 classify.py
+
+# Live capture to stdout
+sudo ./triflowmeter --live eth0 --stdout
 ```
 
 ### Command-Line Options
 
-- `-i <interface>` - Capture from network interface (requires root/admin)
-- `-o <output>` - Specify output CSV file path
-- `--stdout` - Write CSV to standard output
-- `--flow-timeout <seconds>` - Flow timeout duration (default: 120)
-- `--activity-timeout <seconds>` - Activity timeout for idle/active detection (default: 5)
+```
+Usage:
+  triflowmeter <pcap_file> [output_path_or_directory] [options]
+  triflowmeter --live <interface> [output_path_or_directory] [options]
+
+Options:
+  --flow-timeout <sec>      Flow timeout in seconds (default: 120)
+  --activity-timeout <sec>  Activity timeout in seconds (default: 5)
+  --label <label>           Label for all flows (default: Needs_Label)
+  --stdout                  Write CSV header/rows to stdout
+  -h, --help                Show this help
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--live <interface>` | Capture from a live network interface (requires root) | — |
+| `--stdout` | Write CSV to stdout instead of a file | Off |
+| `--flow-timeout <sec>` | Maximum duration of a flow before it is split | `120` |
+| `--activity-timeout <sec>` | Idle threshold for active/idle period detection | `5` |
+| `--label <label>` | Ground truth label written to the Label column | `Needs_Label` |
+
+> **Note:** `--stdout` and an output path cannot be used together.
 
 ## Output Format
 
-TriFlowMeter generates CSV files with 84 columns per flow, including:
+TriFlowMeter generates CSV files with **81 columns** per flow:
 
-- **Flow Identification**: Flow ID, source/destination IPs, ports, protocol
-- **Temporal Features**: Duration, timestamps, inter-arrival times
-- **Size Features**: Packet/byte counts, length statistics
-- **TCP Flags**: Counts for SYN, FIN, RST, PSH, ACK, URG, CWR, ECE
-- **Behavioral Features**: Bulk transfer metrics, subflow statistics
-- **Statistical Metrics**: Mean, standard deviation, min/max for various attributes
+| Category | Columns | Count |
+|----------|---------|-------|
+| Flow Metadata | Flow ID, Src/Dst IP, Ports, Protocol, Timestamps, Duration | 9 |
+| Base Volumetrics | Fwd/Bwd Packets, Bytes, Header Bytes, Active Data Packets | 8 |
+| Rates & Ratios | Packets/s, Bytes/s, Payload Ratio, Count Ratio, Header Ratio | 7 |
+| Packet Size Profiles | Fwd/Bwd/Total Min, Max, Mean, Std | 12 |
+| Inter-Arrival Times | Fwd/Bwd/Flow IAT Total, Min, Max, Mean, Std | 15 |
+| TCP Flag Counts | SYN, ACK, FIN, RST, PSH, URG, CWR, ECE | 8 |
+| TCP Flag Rates | SYN, ACK, FIN, RST, PSH, URG, CWR, ECE Rates | 8 |
+| TCP/IP Mechanics | Init Window Sizes, Min Segment Size, Initial TTL | 5 |
+| Connection States | Active/Idle Min, Max, Mean, Std | 8 |
+| Label | Ground truth label | 1 |
 
 > **Note:**
-> For CICFlowMeter-compatible CSV output, use the v0.0.1 tag/release. If you require CICFlowMeter compatibility, download or checkout the v0.0.1 release.
+> For CICFlowMeter-compatible CSV output, use the v0.0.1 tag/release.
 
-See [docs/FEATURES.md](docs/FEATURES.md) for detailed feature descriptions.
+See [docs/FEATURES.md](docs/FEATURES.md) for detailed feature descriptions with exact CSV header names.
 
 ## Architecture
 
 TriFlowMeter employs a modular pipeline architecture:
 
-1. **Packet Capture**: libpcap-based reader with live/offline modes
-2. **Packet Decoding**: Extracts IP/TCP/UDP headers and flags
-3. **Flow Generation**: Bidirectional flow aggregation with timeout-based termination
-4. **Feature Extraction**: Real-time statistical computation
-5. **CSV Export**: Streaming output writer
+```
+PacketReader → PacketDecoders → FlowGenerator → CSVWriter
+                                      │
+                                 BasicFlow (per-flow statistics)
+                                      │
+                                 LiveDashboard (terminal UI)
+```
+
+1. **PacketReader**: libpcap-based reader with live/offline modes
+2. **PacketDecoders**: Extracts IPv4/IPv6/TCP/UDP/L2TP headers and metadata
+3. **FlowGenerator**: Bidirectional flow aggregation with timeout-based splitting
+4. **BasicFlow**: Real-time statistical computation via Welford's algorithm
+5. **CSVWriter**: 81-column streaming CSV serialization
+6. **LiveDashboard**: Real-time terminal dashboard with packet/flow statistics
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architectural documentation.
+
+## Protocols Supported
+
+| Protocol | Status |
+|----------|--------|
+| IPv4 (TCP, UDP) | ✅ Fully supported |
+| IPv6 (TCP, UDP) | ✅ Fully supported |
+| L2TP / VPN tunnels | ✅ Decapsulated and decoded |
+| ARP | ❌ Disabled (declared but not active) |
+| ICMP | ❌ Not supported |
 
 ## Applications
 
@@ -134,10 +202,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architectural docu
 
 ## Performance
 
-- Processes 100K+ packets/second on modern hardware
-- Memory-efficient streaming architecture
-- Minimal overhead for live capture scenarios
-- Zero-copy packet processing where possible
+- Streaming architecture with bounded memory usage
+- Single-pass statistics (Welford's) — no per-packet storage
+- FNV-1a hash-based flow lookup in O(1) average time
+- Optional `-march=native` for CPU-specific optimizations
+- Link-time optimization (`-flto`) in Release builds
 
 ## Contributing
 
@@ -157,7 +226,7 @@ If you use TriFlowMeter in academic research, please cite:
   title={TriFlowMeter: High-Performance Network Flow Analyzer},
   author={Chowdhury, Somnath},
   year={2026},
-  url={https://github.com/SomnathChW},
+  url={https://github.com/SomnathChW/TriFlowMeter},
   license={GPL-3.0}
 }
 ```
@@ -171,7 +240,7 @@ TriFlowMeter is inspired by CICFlowMeter and implements bidirectional flow analy
 For issues, questions, or contributions:
 
 - Open an issue on the project repository
-- Check existing documentation in ARCHITECTURE.md and FEATURES.md
+- Check existing documentation in [ARCHITECTURE.md](docs/ARCHITECTURE.md) and [FEATURES.md](docs/FEATURES.md)
 - Review the source code documentation
 
 ---

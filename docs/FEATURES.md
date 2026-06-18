@@ -19,515 +19,605 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 # TriFlowMeter Feature Descriptions
 
-This document provides detailed descriptions of all 84 features extracted by TriFlowMeter for each network flow.
+This document provides detailed descriptions of all **81 columns** exported by TriFlowMeter for each network flow. Columns are listed in exact CSV output order as defined in `CSVWriter.cpp`.
 
 ## Feature Categories
 
-1. [Flow Identifiers](#flow-identifiers) (6 features)
-2. [Temporal Features](#temporal-features) (2 features)
-3. [Packet Statistics](#packet-statistics) (12 features)
-4. [Inter-Arrival Time (IAT) Features](#inter-arrival-time-iat-features) (16 features)
-5. [TCP Flag Features](#tcp-flag-features) (14 features)
-6. [Flow Rate Features](#flow-rate-features) (4 features)
-7. [Length Statistics](#length-statistics) (13 features)
-8. [Bulk Transfer Features](#bulk-transfer-features) (6 features)
-9. [Subflow Features](#subflow-features) (4 features)
-10. [TCP-Specific Features](#tcp-specific-features) (4 features)
-11. [Active/Idle Time Features](#activeidle-time-features) (8 features)
-12. [Label](#label) (1 feature)
+1. [Flow Metadata](#flow-metadata) (9 columns)
+2. [Base Volumetrics](#base-volumetrics) (8 columns)
+3. [Rates & Ratios](#rates--ratios) (7 columns)
+4. [Packet Size Profiles — Forward](#packet-size-profiles--forward) (4 columns)
+5. [Packet Size Profiles — Backward](#packet-size-profiles--backward) (4 columns)
+6. [Packet Size Profiles — Total](#packet-size-profiles--total) (4 columns)
+7. [Inter-Arrival Time Profiles — Forward](#inter-arrival-time-profiles--forward) (5 columns)
+8. [Inter-Arrival Time Profiles — Backward](#inter-arrival-time-profiles--backward) (5 columns)
+9. [Inter-Arrival Time Profiles — Flow](#inter-arrival-time-profiles--flow) (5 columns)
+10. [TCP Flag Counts](#tcp-flag-counts) (8 columns)
+11. [TCP Flag Rates](#tcp-flag-rates) (8 columns)
+12. [TCP/IP Mechanics — Window & Segment](#tcpip-mechanics--window--segment) (3 columns)
+13. [TCP/IP Mechanics — TTL](#tcpip-mechanics--ttl) (2 columns)
+14. [Connection States — Active](#connection-states--active) (4 columns)
+15. [Connection States — Idle](#connection-states--idle) (4 columns)
+16. [Label](#label) (1 column)
 
 ---
 
-## Flow Identifiers
+## Flow Metadata
 
 ### 1. Flow ID
 
+- **CSV Header**: `Flow ID`
 - **Type**: String
 - **Format**: `{src_ip}-{dst_ip}-{src_port}-{dst_port}-{protocol}`
 - **Description**: Unique identifier for the flow in forward direction
 - **Example**: `192.168.1.10-8.8.8.8-52341-53-17`
-- **Use**: Primary key for flow identification
+- **Source**: `BasicPacketInfo::fwdFlowId()`
 
 ### 2. Src IP
 
+- **CSV Header**: `Src IP`
 - **Type**: String (IPv4 or IPv6)
 - **Description**: Source IP address (originator of the flow)
 - **Example**: `192.168.1.10` or `2001:db8::1`
-- **Use**: Network endpoint identification
 
 ### 3. Src Port
 
-- **Type**: Integer (0-65535)
+- **CSV Header**: `Src Port`
+- **Type**: Integer (0–65535)
 - **Description**: Source port number
-- **Example**: `52341`
-- **Use**: Application/service identification, ephemeral port analysis
 
 ### 4. Dst IP
 
+- **CSV Header**: `Dst IP`
 - **Type**: String (IPv4 or IPv6)
 - **Description**: Destination IP address
-- **Example**: `8.8.8.8`
-- **Use**: Network endpoint identification
 
 ### 5. Dst Port
 
-- **Type**: Integer (0-65535)
+- **CSV Header**: `Dst Port`
+- **Type**: Integer (0–65535)
 - **Description**: Destination port number
-- **Example**: `80` (HTTP), `443` (HTTPS), `53` (DNS)
-- **Use**: Service identification, application classification
 
 ### 6. Protocol
 
+- **CSV Header**: `Protocol`
 - **Type**: Integer
 - **Values**: `6` (TCP), `17` (UDP)
 - **Description**: IP protocol number
-- **Use**: Transport layer protocol identification
 
----
+### 7. Flow Start Time
 
-## Temporal Features
-
-### 7. Timestamp
-
+- **CSV Header**: `Flow Start Time`
 - **Type**: String
 - **Format**: `DD/MM/YYYY HH:MM:SS AM/PM`
-- **Description**: Human-readable timestamp of first packet in flow
+- **Description**: Human-readable timestamp of the first packet in the flow
 - **Example**: `27/03/2026 08:45:32 PM`
-- **Use**: Temporal analysis, time-of-day patterns
+- **Source**: `BasicFlow::getTimestampString()`
 
-### 8. Flow Duration
+### 8. Flow End Time
 
+- **CSV Header**: `Flow End Time`
+- **Type**: String
+- **Format**: `DD/MM/YYYY HH:MM:SS AM/PM`
+- **Description**: Human-readable timestamp of the last packet in the flow
+- **Source**: `BasicFlow::getFlowEndTimeString()`
+
+### 9. Flow Duration
+
+- **CSV Header**: `Flow Duration`
 - **Type**: Integer (microseconds)
 - **Description**: Total duration from first to last packet
-- **Formula**: `last_seen_time - flow_start_time`
-- **Example**: `125483920` (125.48 seconds)
-- **Use**: Session length analysis, long-lived connection detection
+- **Formula**: `flow_last_seen - flow_start_time`
+- **Source**: `BasicFlow::getDuration()`
 
 ---
 
-## Packet Statistics
+## Base Volumetrics
 
-### 9. Total Fwd Packet
+### 10. Total Fwd Packets
 
+- **CSV Header**: `Total Fwd Packets`
 - **Type**: Integer
 - **Description**: Number of packets in forward direction (src → dst)
-- **Range**: 1 to flow size
-- **Use**: Traffic asymmetry analysis, download/upload ratio
 
-### 10. Total Bwd packets
+### 11. Total Bwd Packets
 
+- **CSV Header**: `Total Bwd Packets`
 - **Type**: Integer
 - **Description**: Number of packets in backward direction (dst → src)
-- **Range**: 0 to flow size
-- **Use**: Interactive vs. unidirectional flow detection
 
-### 11. Total Length of Fwd Packet
+### 12. Total Fwd Bytes
 
-- **Type**: Float (bytes)
+- **CSV Header**: `Total Fwd Bytes`
+- **Type**: Integer (bytes)
 - **Description**: Sum of payload bytes in forward direction
-- **Formula**: `sum(fwd_packet_payloads)`
-- **Use**: Data volume analysis
+- **Source**: `BasicFlow::forward_bytes`
 
-### 12. Total Length of Bwd Packet
+### 13. Total Bwd Bytes
 
-- **Type**: Float (bytes)
+- **CSV Header**: `Total Bwd Bytes`
+- **Type**: Integer (bytes)
 - **Description**: Sum of payload bytes in backward direction
-- **Formula**: `sum(bwd_packet_payloads)`
-- **Use**: Response size analysis
+- **Source**: `BasicFlow::backward_bytes`
 
-### 13-16. Fwd Packet Length {Max, Min, Mean, Std}
+### 14. Fwd Header Length
 
-- **Type**: Float (bytes)
-- **Description**: Statistical measures of forward packet payload sizes
-- **Use**:
-    - **Max**: Large packet detection (e.g., full MTU)
-    - **Min**: Small packet detection (e.g., ACKs, keep-alives)
-    - **Mean**: Average packet size
-    - **Std**: Packet size variability
-
-### 17-20. Bwd Packet Length {Max, Min, Mean, Std}
-
-- **Type**: Float (bytes)
-- **Description**: Statistical measures of backward packet payload sizes
-- **Use**: Server response characterization, traffic pattern analysis
-
----
-
-## Inter-Arrival Time (IAT) Features
-
-Inter-Arrival Time measures the time gap between consecutive packets.
-
-### 21-25. Flow IAT {Mean, Std, Max, Min}
-
-- **Type**: Float (microseconds)
-- **Description**: IAT statistics across all packets in flow
-- **Formula**: `IAT[i] = timestamp[i] - timestamp[i-1]`
-- **Use**:
-    - **Mean**: Average packet rate
-    - **Std**: Traffic burstiness
-    - **Max**: Longest gap (idle period)
-    - **Min**: Shortest gap (rapid-fire packets)
-
-### 26-30. Fwd IAT {Total, Mean, Std, Max, Min}
-
-- **Type**: Float (microseconds)
-- **Description**: IAT statistics for forward direction packets only
-- **Use**: Client sending behavior, upload pattern analysis
-- **Note**: Only computed if forward_packets > 1
-
-### 31-35. Bwd IAT {Total, Mean, Std, Max, Min}
-
-- **Type**: Float (microseconds)
-- **Description**: IAT statistics for backward direction packets only
-- **Use**: Server response timing, download pattern analysis
-- **Note**: Only computed if backward_packets > 1
-
----
-
-## TCP Flag Features
-
-TCP flags indicate control information in TCP protocol.
-
-### 36. Fwd PSH Flags
-
-- **Type**: Integer
-- **Description**: Count of PSH flags in forward direction
-- **TCP Flag**: Push (urgent data delivery)
-- **Use**: Interactive application detection (SSH, Telnet)
-
-### 37. Bwd PSH Flags
-
-- **Type**: Integer
-- **Description**: Count of PSH flags in backward direction
-- **Use**: Server push behavior
-
-### 38. Fwd URG Flags
-
-- **Type**: Integer
-- **Description**: Count of URG flags in forward direction
-- **TCP Flag**: Urgent (out-of-band data)
-- **Use**: Urgent data detection (rare in modern networks)
-
-### 39. Bwd URG Flags
-
-- **Type**: Integer
-- **Description**: Count of URG flags in backward direction
-- **Use**: Urgent response detection
-
-### 40. Fwd Header Length
-
+- **CSV Header**: `Fwd Header Length`
 - **Type**: Integer (bytes)
-- **Description**: Total header bytes in forward direction
-- **Formula**: `sum(ethernet + IP + TCP/UDP headers)`
-- **Use**: Protocol overhead analysis
+- **Description**: Total TCP/UDP header bytes in forward direction
+- **Source**: `BasicFlow::f_header_bytes`
 
-### 41. Bwd Header Length
+### 15. Bwd Header Length
 
+- **CSV Header**: `Bwd Header Length`
 - **Type**: Integer (bytes)
-- **Description**: Total header bytes in backward direction
-- **Use**: Protocol overhead analysis
+- **Description**: Total TCP/UDP header bytes in backward direction
+- **Source**: `BasicFlow::b_header_bytes`
 
-### 42-49. {FIN, SYN, RST, PSH, ACK, URG, CWR, ECE} Flag Count
+### 16. Fwd Act Data Pkts
 
+- **CSV Header**: `Fwd Act Data Pkts`
 - **Type**: Integer
-- **Description**: Total count of each TCP flag in both directions
-- **Flags**:
-    - **FIN**: Connection termination
-    - **SYN**: Connection establishment
-    - **RST**: Connection reset
-    - **PSH**: Push data immediately
-    - **ACK**: Acknowledgment
-    - **URG**: Urgent pointer valid
-    - **CWR**: Congestion Window Reduced (ECN)
-    - **ECE**: ECN Echo (ECN)
-- **Use**:
-    - SYN/FIN ratio: Connection behavior
-    - RST count: Aborted connections
-    - ACK count: Protocol conformance
-    - CWR/ECE: Congestion detection
+- **Description**: Forward packets with payload ≥ 1 byte (excludes pure ACKs)
+- **Source**: `BasicFlow::act_data_pkt_forward`
+
+### 17. Bwd Act Data Pkts
+
+- **CSV Header**: `Bwd Act Data Pkts`
+- **Type**: Integer
+- **Description**: Backward packets with payload ≥ 1 byte
+- **Source**: `BasicFlow::act_data_pkt_backward`
 
 ---
 
-## Flow Rate Features
+## Rates & Ratios
 
-### 50. Flow Bytes/s
+All rate features return `0.0` when flow duration is zero.
 
+### 18. Flow Packets/s
+
+- **CSV Header**: `Flow Packets/s`
+- **Type**: Float (packets/second)
+- **Formula**: `total_packets / duration_sec`
+
+### 19. Flow Bytes/s
+
+- **CSV Header**: `Flow Bytes/s`
 - **Type**: Float (bytes/second)
-- **Description**: Total bytes per second
-- **Formula**: `(forward_bytes + backward_bytes) / (duration_seconds)`
-- **Use**: Bandwidth utilization, throughput analysis
+- **Formula**: `total_bytes / duration_sec`
 
-### 51. Flow Packets/s
+### 20. Fwd Packets/s
 
+- **CSV Header**: `Fwd Packets/s`
 - **Type**: Float (packets/second)
-- **Description**: Total packets per second
-- **Formula**: `(forward_packets + backward_packets) / (duration_seconds)`
-- **Use**: Packet rate analysis, DoS detection
+- **Formula**: `forward_packets / duration_sec`
 
-### 52. Fwd Packets/s
+### 21. Bwd Packets/s
 
+- **CSV Header**: `Bwd Packets/s`
 - **Type**: Float (packets/second)
-- **Description**: Forward packets per second
-- **Formula**: `forward_packets / (duration_seconds)`
-- **Use**: Upload rate analysis
+- **Formula**: `backward_packets / duration_sec`
 
-### 53. Bwd Packets/s
+### 22. Payload Ratio
 
-- **Type**: Float (packets/second)
-- **Description**: Backward packets per second
-- **Formula**: `backward_packets / (duration_seconds)`
-- **Use**: Download rate analysis
-
----
-
-## Length Statistics
-
-### 54. Packet Length Min
-
-- **Type**: Float (bytes)
-- **Description**: Minimum packet payload size across all packets
-- **Use**: Small packet detection
-
-### 55. Packet Length Max
-
-- **Type**: Float (bytes)
-- **Description**: Maximum packet payload size across all packets
-- **Use**: MTU analysis, large packet detection
-
-### 56. Packet Length Mean
-
-- **Type**: Float (bytes)
-- **Description**: Average packet payload size
-- **Formula**: `sum(all_packet_payloads) / total_packets`
-- **Use**: Flow characterization
-
-### 57. Packet Length Std
-
-- **Type**: Float (bytes)
-- **Description**: Standard deviation of packet payload sizes
-- **Use**: Packet size variability, traffic regularity
-
-### 58. Packet Length Variance
-
-- **Type**: Float (bytes²)
-- **Description**: Variance of packet payload sizes
-- **Formula**: `std²`
-- **Use**: Statistical analysis, outlier detection
-
-### 59. Down/Up Ratio
-
+- **CSV Header**: `Payload Ratio`
 - **Type**: Float
-- **Description**: Ratio of backward to forward packets
-- **Formula**: `backward_packets / forward_packets`
-- **Use**:
-    - `> 1`: Download-heavy (e.g., video streaming)
-    - `< 1`: Upload-heavy (e.g., backup, P2P seeding)
-    - `≈ 1`: Balanced (e.g., VoIP, gaming)
+- **Description**: Ratio of backward bytes to forward bytes
+- **Formula**: `backward_bytes / forward_bytes` (0 if `forward_bytes == 0`)
+- **Use**: Asymmetry detection (download-heavy vs upload-heavy)
 
-### 60. Average Packet Size
+### 23. Packet Count Ratio
 
+- **CSV Header**: `Packet Count Ratio`
+- **Type**: Float
+- **Description**: Ratio of backward packets to forward packets
+- **Formula**: `backward_packets / forward_packets` (0 if `forward_packets == 0`)
+
+### 24. Header-to-Total Ratio
+
+- **CSV Header**: `Header-to-Total Ratio`
+- **Type**: Float
+- **Description**: Fraction of total traffic that is protocol overhead
+- **Formula**: `total_header_bytes / (total_bytes + total_header_bytes)` (0 if denominator is 0)
+- **Use**: Protocol overhead analysis, tunneling detection
+
+---
+
+## Packet Size Profiles — Forward
+
+All features in this group return `0` when no forward packets exist.
+
+### 25. Fwd Pkt Len Min
+
+- **CSV Header**: `Fwd Pkt Len Min`
 - **Type**: Float (bytes)
-- **Description**: Average payload size across all packets
-- **Formula**: `flow_length_stats.sum / packet_count`
-- **Use**: Flow characterization
+- **Description**: Minimum payload size of forward packets
 
-### 61. Fwd Segment Size Avg
+### 26. Fwd Pkt Len Max
 
+- **CSV Header**: `Fwd Pkt Len Max`
 - **Type**: Float (bytes)
-- **Description**: Average forward packet payload size
-- **Formula**: `fwd_pkt_stats.sum / forward_packets`
-- **Use**: Upload segment size analysis
+- **Description**: Maximum payload size of forward packets
 
-### 62. Bwd Segment Size Avg
+### 27. Fwd Pkt Len Mean
 
+- **CSV Header**: `Fwd Pkt Len Mean`
 - **Type**: Float (bytes)
-- **Description**: Average backward packet payload size
-- **Formula**: `bwd_pkt_stats.sum / backward_packets`
-- **Use**: Download segment size analysis
+- **Description**: Mean payload size of forward packets
+
+### 28. Fwd Pkt Len Std
+
+- **CSV Header**: `Fwd Pkt Len Std`
+- **Type**: Float (bytes)
+- **Description**: Standard deviation of forward packet payload sizes
 
 ---
 
-## Bulk Transfer Features
+## Packet Size Profiles — Backward
 
-Bulk transfers are detected as 4+ consecutive packets with < 1 second gaps.
+All features in this group return `0` when no backward packets exist.
 
-### 63. Fwd Bytes/Bulk Avg
+### 29. Bwd Pkt Len Min
 
-- **Type**: Integer (bytes)
-- **Description**: Average bytes per bulk transfer in forward direction
-- **Formula**: `fbulk_size_total / fbulk_state_count`
-- **Use**: Sustained upload detection
+- **CSV Header**: `Bwd Pkt Len Min`
+- **Type**: Float (bytes)
 
-### 64. Fwd Packet/Bulk Avg
+### 30. Bwd Pkt Len Max
 
-- **Type**: Integer
-- **Description**: Average packets per bulk transfer in forward direction
-- **Formula**: `fbulk_packet_count / fbulk_state_count`
-- **Use**: Upload burst size
+- **CSV Header**: `Bwd Pkt Len Max`
+- **Type**: Float (bytes)
 
-### 65. Fwd Bulk Rate Avg
+### 31. Bwd Pkt Len Mean
 
-- **Type**: Integer (bytes/second)
-- **Description**: Average bulk transfer rate in forward direction
-- **Formula**: `fbulk_size_total / (fbulk_duration_seconds)`
-- **Use**: Upload throughput during bursts
+- **CSV Header**: `Bwd Pkt Len Mean`
+- **Type**: Float (bytes)
 
-### 66. Bwd Bytes/Bulk Avg
+### 32. Bwd Pkt Len Std
 
-- **Type**: Integer (bytes)
-- **Description**: Average bytes per bulk transfer in backward direction
-- **Use**: Sustained download detection
-
-### 67. Bwd Packet/Bulk Avg
-
-- **Type**: Integer
-- **Description**: Average packets per bulk transfer in backward direction
-- **Use**: Download burst size
-
-### 68. Bwd Bulk Rate Avg
-
-- **Type**: Integer (bytes/second)
-- **Description**: Average bulk transfer rate in backward direction
-- **Use**: Download throughput during bursts
-- **Example Use Case**: Video streaming, file download
+- **CSV Header**: `Bwd Pkt Len Std`
+- **Type**: Float (bytes)
 
 ---
 
-## Subflow Features
+## Packet Size Profiles — Total
 
-Subflows are activity bursts separated by > 1 second idle periods.
+Statistics across all packets in both directions.
 
-### 69. Subflow Fwd Packets
+### 33. Pkt Len Min
 
-- **Type**: Integer
-- **Description**: Average forward packets per subflow
-- **Formula**: `forward_packets / subflow_count`
-- **Use**: Activity burst analysis
+- **CSV Header**: `Pkt Len Min`
+- **Type**: Float (bytes)
 
-### 70. Subflow Fwd Bytes
+### 34. Pkt Len Max
 
-- **Type**: Integer (bytes)
-- **Description**: Average forward bytes per subflow
-- **Formula**: `forward_bytes / subflow_count`
-- **Use**: Upload burst size
+- **CSV Header**: `Pkt Len Max`
+- **Type**: Float (bytes)
 
-### 71. Subflow Bwd Packets
+### 35. Pkt Len Mean
 
-- **Type**: Integer
-- **Description**: Average backward packets per subflow
-- **Formula**: `backward_packets / subflow_count`
-- **Use**: Response burst analysis
+- **CSV Header**: `Pkt Len Mean`
+- **Type**: Float (bytes)
 
-### 72. Subflow Bwd Bytes
+### 36. Pkt Len Std
 
-- **Type**: Integer (bytes)
-- **Description**: Average backward bytes per subflow
-- **Formula**: `backward_bytes / subflow_count`
-- **Use**: Download burst size
-
-**Note**: All subflow features are 0 if `subflow_count == 0`.
+- **CSV Header**: `Pkt Len Std`
+- **Type**: Float (bytes)
 
 ---
 
-## TCP-Specific Features
+## Inter-Arrival Time Profiles — Forward
 
-### 73. FWD Init Win Bytes
+IAT = time gap between consecutive packets in the same direction. All features return `0` when `forward_packets ≤ 1`.
 
-- **Type**: Integer (bytes)
-- **Description**: TCP window size of first forward packet
-- **Range**: 0-65535 (standard), higher with window scaling
-- **Use**: Initial receive window analysis, OS fingerprinting
+### 37. Fwd IAT Total
 
-### 74. Bwd Init Win Bytes
-
-- **Type**: Integer (bytes)
-- **Description**: TCP window size of first backward packet
-- **Use**: Server window size, congestion control analysis
-
-### 75. Fwd Act Data Pkts
-
-- **Type**: Integer
-- **Description**: Forward packets with payload (excluding pure ACKs)
-- **Condition**: `payload_bytes >= 1`
-- **Use**: Actual data transfer vs. control packets
-
-### 76. Fwd Seg Size Min
-
-- **Type**: Integer (bytes)
-- **Description**: Minimum header size in forward direction
-- **Use**: Protocol overhead, encapsulation detection
-
----
-
-## Active/Idle Time Features
-
-Based on activity timeout (default: 5 seconds).
-
-### 77. Active Mean
-
+- **CSV Header**: `Fwd IAT Total`
 - **Type**: Float (microseconds)
-- **Description**: Average duration of active periods
-- **Active Period**: Consecutive packets within activity timeout
-- **Use**: Session activity pattern
+- **Description**: Sum of all forward inter-arrival times
 
-### 78. Active Std
+### 38. Fwd IAT Min
 
+- **CSV Header**: `Fwd IAT Min`
 - **Type**: Float (microseconds)
-- **Description**: Standard deviation of active period durations
-- **Use**: Activity regularity
 
-### 79. Active Max
+### 39. Fwd IAT Max
 
+- **CSV Header**: `Fwd IAT Max`
 - **Type**: Float (microseconds)
-- **Description**: Maximum active period duration
-- **Use**: Longest burst detection
 
-### 80. Active Min
+### 40. Fwd IAT Mean
 
+- **CSV Header**: `Fwd IAT Mean`
+- **Type**: Float (microseconds)
+
+### 41. Fwd IAT Std
+
+- **CSV Header**: `Fwd IAT Std`
+- **Type**: Float (microseconds)
+
+---
+
+## Inter-Arrival Time Profiles — Backward
+
+All features return `0` when `backward_packets ≤ 1`.
+
+### 42. Bwd IAT Total
+
+- **CSV Header**: `Bwd IAT Total`
+- **Type**: Float (microseconds)
+
+### 43. Bwd IAT Min
+
+- **CSV Header**: `Bwd IAT Min`
+- **Type**: Float (microseconds)
+
+### 44. Bwd IAT Max
+
+- **CSV Header**: `Bwd IAT Max`
+- **Type**: Float (microseconds)
+
+### 45. Bwd IAT Mean
+
+- **CSV Header**: `Bwd IAT Mean`
+- **Type**: Float (microseconds)
+
+### 46. Bwd IAT Std
+
+- **CSV Header**: `Bwd IAT Std`
+- **Type**: Float (microseconds)
+
+---
+
+## Inter-Arrival Time Profiles — Flow
+
+IAT across all packets regardless of direction. Returns `0` when flow has only 1 packet.
+
+### 47. Flow IAT Total
+
+- **CSV Header**: `Flow IAT Total`
+- **Type**: Float (microseconds)
+
+### 48. Flow IAT Min
+
+- **CSV Header**: `Flow IAT Min`
+- **Type**: Float (microseconds)
+
+### 49. Flow IAT Max
+
+- **CSV Header**: `Flow IAT Max`
+- **Type**: Float (microseconds)
+
+### 50. Flow IAT Mean
+
+- **CSV Header**: `Flow IAT Mean`
+- **Type**: Float (microseconds)
+
+### 51. Flow IAT Std
+
+- **CSV Header**: `Flow IAT Std`
+- **Type**: Float (microseconds)
+
+---
+
+## TCP Flag Counts
+
+Total count of each TCP flag across **both** directions (forward + backward combined). UDP flows always have all flag counts equal to 0.
+
+### 52. SYN Flag Count
+
+- **CSV Header**: `SYN Flag Count`
+- **Type**: Integer
+- **Description**: Connection establishment requests
+
+### 53. ACK Flag Count
+
+- **CSV Header**: `ACK Flag Count`
+- **Type**: Integer
+- **Description**: Acknowledgments
+
+### 54. FIN Flag Count
+
+- **CSV Header**: `FIN Flag Count`
+- **Type**: Integer
+- **Description**: Connection termination requests
+
+### 55. RST Flag Count
+
+- **CSV Header**: `RST Flag Count`
+- **Type**: Integer
+- **Description**: Connection resets
+
+### 56. PSH Flag Count
+
+- **CSV Header**: `PSH Flag Count`
+- **Type**: Integer
+- **Description**: Push data immediately
+
+### 57. URG Flag Count
+
+- **CSV Header**: `URG Flag Count`
+- **Type**: Integer
+- **Description**: Urgent pointer valid
+
+### 58. CWR Flag Count
+
+- **CSV Header**: `CWR Flag Count`
+- **Type**: Integer
+- **Description**: Congestion Window Reduced (ECN)
+
+### 59. ECE Flag Count
+
+- **CSV Header**: `ECE Flag Count`
+- **Type**: Integer
+- **Description**: ECN Echo (ECN)
+
+---
+
+## TCP Flag Rates
+
+Rate of each TCP flag, normalized by total packets in the flow (`flag_count / total_packets`). These are duration-invariant features crucial for ML classification.
+
+### 60. SYN Flag Rate
+
+- **CSV Header**: `SYN Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of connection establishment requests
+
+### 61. ACK Flag Rate
+
+- **CSV Header**: `ACK Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of acknowledgments
+
+### 62. FIN Flag Rate
+
+- **CSV Header**: `FIN Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of connection termination requests
+
+### 63. RST Flag Rate
+
+- **CSV Header**: `RST Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of connection resets
+
+### 64. PSH Flag Rate
+
+- **CSV Header**: `PSH Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of push flags
+
+### 65. URG Flag Rate
+
+- **CSV Header**: `URG Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of urgent flags
+
+### 66. CWR Flag Rate
+
+- **CSV Header**: `CWR Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of congestion window reduced flags
+
+### 67. ECE Flag Rate
+
+- **CSV Header**: `ECE Flag Rate`
+- **Type**: Float (0.0 to 1.0)
+- **Description**: Rate of ECN echo flags
+
+---
+
+## TCP/IP Mechanics — Window & Segment
+
+### 68. Fwd Init Win Size
+
+- **CSV Header**: `Fwd Init Win Size`
+- **Type**: Integer (bytes)
+- **Description**: TCP window size from the first forward packet (SYN)
+- **Use**: OS fingerprinting, initial receive buffer analysis
+
+### 69. Bwd Init Win Size
+
+- **CSV Header**: `Bwd Init Win Size`
+- **Type**: Integer (bytes)
+- **Description**: TCP window size from the first backward packet (SYN-ACK)
+
+### 70. Fwd Min Segment Size
+
+- **CSV Header**: `Fwd Min Segment Size`
+- **Type**: Integer (bytes)
+- **Description**: Minimum TCP/UDP header size observed in forward packets
+- **Source**: `BasicFlow::min_seg_size_forward`
+
+---
+
+## TCP/IP Mechanics — TTL
+
+### 71. Fwd Initial TTL
+
+- **CSV Header**: `Fwd Initial TTL`
+- **Type**: Integer (0–255)
+- **Description**: IP TTL (Time-to-Live) / Hop Limit from the first forward packet
+- **Use**: OS fingerprinting, path length estimation
+
+### 72. Bwd Initial TTL
+
+- **CSV Header**: `Bwd Initial TTL`
+- **Type**: Integer (0–255)
+- **Description**: IP TTL / Hop Limit from the first backward packet
+
+---
+
+## Connection States — Active
+
+Active periods are consecutive packet sequences where inter-packet gaps stay within the activity timeout (default: 5 seconds). All features return `0` when no active periods have been recorded.
+
+### 73. Active Min
+
+- **CSV Header**: `Active Min`
 - **Type**: Float (microseconds)
 - **Description**: Minimum active period duration
-- **Use**: Shortest burst detection
 
-### 81. Idle Mean
+### 74. Active Max
 
+- **CSV Header**: `Active Max`
 - **Type**: Float (microseconds)
-- **Description**: Average duration of idle periods
-- **Idle Period**: Gap > activity timeout between packets
-- **Use**: Think time, user interaction patterns
+- **Description**: Maximum active period duration
 
-### 82. Idle Std
+### 75. Active Mean
 
+- **CSV Header**: `Active Mean`
 - **Type**: Float (microseconds)
-- **Description**: Standard deviation of idle period durations
-- **Use**: Idle period regularity
+- **Description**: Average active period duration
 
-### 83. Idle Max
+### 76. Active Std
 
+- **CSV Header**: `Active Std`
 - **Type**: Float (microseconds)
-- **Description**: Maximum idle period duration
-- **Use**: Longest silence detection
+- **Description**: Standard deviation of active period durations
 
-### 84. Idle Min
+---
 
+## Connection States — Idle
+
+Idle periods are gaps between active periods that exceed the activity timeout. All features return `0` when no idle periods have been recorded.
+
+### 77. Idle Min
+
+- **CSV Header**: `Idle Min`
 - **Type**: Float (microseconds)
 - **Description**: Minimum idle period duration
-- **Use**: Shortest silence detection
 
-**Note**: Active/Idle features are 0 if no active/idle periods detected.
+### 78. Idle Max
+
+- **CSV Header**: `Idle Max`
+- **Type**: Float (microseconds)
+- **Description**: Maximum idle period duration
+
+### 79. Idle Mean
+
+- **CSV Header**: `Idle Mean`
+- **Type**: Float (microseconds)
+- **Description**: Average idle period duration
+
+### 80. Idle Std
+
+- **CSV Header**: `Idle Std`
+- **Type**: Float (microseconds)
+- **Description**: Standard deviation of idle period durations
 
 ---
 
 ## Label
 
-### 85. Label
+### 81. Label
 
+- **CSV Header**: `Label`
 - **Type**: String
-- **Default**: Empty
-- **Description**: Ground truth label for supervised learning
-- **Common Values**: `benign`, `DoS`, `PortScan`, `Botnet`, etc.
-- **Use**: Classification target variable
-
-**Note**: TriFlowMeter does not assign labels. This field is left empty for post-processing or manual labeling.
+- **Default**: `Needs_Label`
+- **Description**: Ground truth label assigned via the `--label` CLI flag
+- **Common Values**: `Benign`, `DoS`, `PortScan`, `Botnet`, etc.
+- **Note**: If no `--label` flag is provided, the value defaults to `Needs_Label`
 
 ---
 
@@ -535,19 +625,23 @@ Based on activity timeout (default: 5 seconds).
 
 ### Welford's Algorithm
 
-Running statistics (mean, variance, stddev) use Welford's method for numerical stability and single-pass computation.
+Running statistics (mean, stddev) use Welford's method for numerical stability and single-pass computation. See `RunningStats` in `BasicFlow.h`.
 
 ### Division by Zero
 
-All division operations check for zero denominators and return 0 in such cases.
+All division operations check for zero denominators and return `0.0` in such cases.
 
 ### Missing Values
 
-Features dependent on specific conditions (e.g., forward IAT when forward_packets <= 1) return 0.
+Features dependent on specific conditions (e.g., forward IAT when `forward_packets ≤ 1`) return `0`.
 
 ### Precision
 
-Floating-point values are formatted using Java-compatible number formatting for consistency with CICFlowMeter.
+Floating-point values are formatted using Java-compatible number formatting (`JavaNumberFormat.cpp`) to produce output consistent with CICFlowMeter conventions.
+
+### Flow Export Threshold
+
+Flows with `packetCount() ≤ 0` are not exported. During `finishAllFlows()`, remaining active flows with `packetCount() ≤ 1` are also skipped.
 
 ---
 
@@ -564,16 +658,6 @@ Floating-point values are formatted using Java-compatible number formatting for 
 - Microseconds to seconds: divide by 1,000,000
 - Bytes to kilobytes: divide by 1,024
 - Bytes to megabytes: divide by 1,048,576
-
----
-
-## Version Compatibility
-
-These feature descriptions match:
-
-- **TriFlowMeter**: All versions
-
-For compatibility with other tools, ensure column order and naming conventions match.
 
 ---
 
