@@ -15,7 +15,7 @@ TriFlowMeter converts raw packet data into bidirectional network flows with rich
 
 - **High-Performance C++17**: Optimized with `-O3`, `-march=native`, and link-time optimization
 - **Dual Mode Operation**: Process PCAP files (offline) or capture live network traffic
-- **81-Column CSV Output**: Extracts 81 features per flow covering timing, size, flags, ratios, and behavioral metrics
+- **60-Column CSV Output**: Extracts 60 features per flow covering timing, size, flags, ratios, and behavioral metrics
 - **Bidirectional Flow Analysis**: Tracks forward and backward packet statistics independently
 - **Real-Time Dashboard**: Live terminal UI showing packet counts, flow progress, and uptime
 - **Streaming Output**: `--stdout` mode for piping into downstream tools
@@ -141,17 +141,16 @@ Options:
 
 ## Output Format
 
-TriFlowMeter generates CSV files with **81 columns** per flow:
+TriFlowMeter generates CSV files with **60 columns** per flow:
 
 | Category | Columns | Count |
 |----------|---------|-------|
 | Flow Metadata | Flow ID, Src/Dst IP, Ports, Protocol, Timestamps, Duration | 9 |
-| Base Volumetrics | Fwd/Bwd Packets, Bytes, Header Bytes, Active Data Packets | 8 |
-| Rates & Ratios | Packets/s, Bytes/s, Payload Ratio, Count Ratio, Header Ratio | 7 |
+| Base Volumetrics | Fwd/Bwd Packets | 2 |
+| Rates & Ratios | Flow Packets/s, Payload Bytes/s, Payload Ratio, Count Ratio, Header Ratio | 5 |
 | Packet Size Profiles | Fwd/Bwd/Total Min, Max, Mean, Std | 12 |
-| Inter-Arrival Times | Fwd/Bwd/Flow IAT Total, Min, Max, Mean, Std | 15 |
-| TCP Flag Counts | SYN, ACK, FIN, RST, PSH, URG, CWR, ECE | 8 |
-| TCP Flag Rates | SYN, ACK, FIN, RST, PSH, URG, CWR, ECE Rates | 8 |
+| Inter-Arrival Times | Fwd/Bwd/Flow IAT Min, Max, Mean, Std | 12 |
+| TCP Flag Rates | SYN, ACK, FIN, RST, PSH, URG Rates | 6 |
 | TCP/IP Mechanics | Init Window Sizes, Min Segment Size, Initial TTL | 5 |
 | Connection States | Active/Idle Min, Max, Mean, Std | 8 |
 | Label | Ground truth label | 1 |
@@ -177,7 +176,7 @@ PacketReader → PacketDecoders → FlowGenerator → CSVWriter
 2. **PacketDecoders**: Extracts IPv4/IPv6/TCP/UDP/L2TP headers and metadata
 3. **FlowGenerator**: Bidirectional flow aggregation with timeout-based splitting
 4. **BasicFlow**: Real-time statistical computation via Welford's algorithm
-5. **CSVWriter**: 81-column streaming CSV serialization
+5. **CSVWriter**: 60-column streaming CSV serialization
 6. **LiveDashboard**: Real-time terminal dashboard with packet/flow statistics
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architectural documentation.

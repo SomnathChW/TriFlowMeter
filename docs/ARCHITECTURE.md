@@ -75,7 +75,7 @@ TriFlowMeter follows a pipeline architecture with seven components:
 | **PacketDecoders** | `PacketDecoders.h/cpp` | Decodes Ethernet/IPv4/IPv6/TCP/UDP/L2TP headers |
 | **FlowGenerator** | `FlowGenerator.h/cpp` | Aggregates packets into bidirectional flows |
 | **BasicFlow** | `BasicFlow.h/cpp` | Represents a single flow with all statistical features |
-| **CSVWriter** | `CSVWriter.h/cpp` | Serializes 81-column flow records to CSV |
+| **CSVWriter** | `CSVWriter.h/cpp` | Serializes 60-column flow records to CSV |
 | **LiveDashboard** | `LiveDashboard.h/cpp` | Real-time terminal UI showing capture progress |
 | **JavaNumberFormat** | `JavaNumberFormat.h/cpp` | Java-compatible double formatting for CSV output |
 | **FileUtils** | `FileUtils.h/cpp` | Fixes file ownership when running under sudo |
@@ -103,7 +103,7 @@ TriFlowMeter/
     ├── main.cpp                # Entry point, mode dispatch, signal handling
     ├── BasicFlow.cpp           # Flow statistics, flag checking, active/idle tracking
     ├── CLIOptions.cpp          # Argument parsing, path resolution
-    ├── CSVWriter.cpp           # 81-column CSV header + row serialization
+    ├── CSVWriter.cpp           # 60-column CSV header + row serialization
     ├── FileUtils.cpp           # chown/chmod under sudo
     ├── FlowGenerator.cpp       # Flow table, lookup, timeout, finalization
     ├── JavaNumberFormat.cpp    # Scientific ↔ plain notation conversion
@@ -489,7 +489,7 @@ class FlowGenerator {
 
 ### Header
 
-The CSV header is written by `CSVWriter::writeHeader()` as a fixed 81-column string. See [FEATURES.md](FEATURES.md) for the complete column listing.
+The CSV header is written by `CSVWriter::writeHeader()` as a fixed 60-column string. See [FEATURES.md](FEATURES.md) for the complete column listing.
 
 ### Row Serialization
 

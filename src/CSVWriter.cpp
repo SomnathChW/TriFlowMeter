@@ -12,20 +12,26 @@ using javafmt::formatJavaLikeDouble;
 void CSVWriter::writeHeader(std::ostream& out) {
     out << "Flow ID,Src IP,Src Port,Dst IP,Dst Port,Protocol,"
         << "Flow Start Time,Flow End Time,Flow Duration,"
-        << "Total Fwd Packets,Total Bwd Packets,Total Fwd Bytes,Total Bwd Bytes,"
-        << "Fwd Header Length,Bwd Header Length,Fwd Act Data Pkts,Bwd Act Data Pkts,"
-        << "Flow Packets/s,Flow Bytes/s,Fwd Packets/s,Bwd Packets/s,"
+        << "Total Fwd Packets,Total Bwd Packets,"
+        // Removed: "Total Fwd Bytes,Total Bwd Bytes,"
+        // Removed: "Fwd Header Length,Bwd Header Length,Fwd Act Data Pkts,Bwd Act Data Pkts,"
+        << "Flow Packets/s,Payload Bytes/s,"
+        // Removed: "Fwd Packets/s,Bwd Packets/s,"
         << "Payload Ratio,Packet Count Ratio,Header-to-Total Ratio,"
         << "Fwd Pkt Len Min,Fwd Pkt Len Max,Fwd Pkt Len Mean,Fwd Pkt Len Std,"
         << "Bwd Pkt Len Min,Bwd Pkt Len Max,Bwd Pkt Len Mean,Bwd Pkt Len Std,"
         << "Pkt Len Min,Pkt Len Max,Pkt Len Mean,Pkt Len Std,"
-        << "Fwd IAT Total,Fwd IAT Min,Fwd IAT Max,Fwd IAT Mean,Fwd IAT Std,"
-        << "Bwd IAT Total,Bwd IAT Min,Bwd IAT Max,Bwd IAT Mean,Bwd IAT Std,"
-        << "Flow IAT Total,Flow IAT Min,Flow IAT Max,Flow IAT Mean,Flow IAT Std,"
-        << "SYN Flag Count,ACK Flag Count,FIN Flag Count,RST Flag Count,"
-        << "PSH Flag Count,URG Flag Count,CWR Flag Count,ECE Flag Count,"
+        // Removed: "Fwd IAT Total,"
+        << "Fwd IAT Min,Fwd IAT Max,Fwd IAT Mean,Fwd IAT Std,"
+        // Removed: "Bwd IAT Total,"
+        << "Bwd IAT Min,Bwd IAT Max,Bwd IAT Mean,Bwd IAT Std,"
+        // Removed: "Flow IAT Total,"
+        << "Flow IAT Min,Flow IAT Max,Flow IAT Mean,Flow IAT Std,"
+        // Removed: "SYN Flag Count,ACK Flag Count,FIN Flag Count,RST Flag Count,"
+        // Removed: "PSH Flag Count,URG Flag Count,CWR Flag Count,ECE Flag Count,"
         << "SYN Flag Rate,ACK Flag Rate,FIN Flag Rate,RST Flag Rate,"
-        << "PSH Flag Rate,URG Flag Rate,CWR Flag Rate,ECE Flag Rate,"
+        << "PSH Flag Rate,URG Flag Rate,"
+        // Removed: "CWR Flag Rate,ECE Flag Rate,"
         << "Fwd Init Win Size,Bwd Init Win Size,Fwd Min Segment Size,"
         << "Fwd Initial TTL,Bwd Initial TTL,"
         << "Active Min,Active Max,Active Mean,Active Std,"
@@ -73,21 +79,25 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std
         << flow.getFlowEndTimeString() << ','
         << flow.getDuration() << ',';
 
-    // Base Volumetrics (8 features)
+    // Base Volumetrics
+    /* Removed:
+       << flow.forward_bytes << ','
+       << flow.backward_bytes << ','
+       << flow.f_header_bytes << ','
+       << flow.b_header_bytes << ','
+       << flow.act_data_pkt_forward << ','
+       << flow.act_data_pkt_backward << ',';
+    */
     out << flow.forward_packets << ','
-        << flow.backward_packets << ','
-        << flow.forward_bytes << ','
-        << flow.backward_bytes << ','
-        << flow.f_header_bytes << ','
-        << flow.b_header_bytes << ','
-        << flow.act_data_pkt_forward << ','
-        << flow.act_data_pkt_backward << ',';
+        << flow.backward_packets << ',';
 
-    // Rates & Ratios (7 features)
+    // Rates & Ratios
+    /* Removed:
+       << formatJavaLikeDouble(fwd_packets_per_sec) << ','
+       << formatJavaLikeDouble(bwd_packets_per_sec) << ','
+    */
     out << formatJavaLikeDouble(flow_packets_per_sec) << ','
-        << formatJavaLikeDouble(flow_bytes_per_sec) << ','
-        << formatJavaLikeDouble(fwd_packets_per_sec) << ','
-        << formatJavaLikeDouble(bwd_packets_per_sec) << ','
+        << formatJavaLikeDouble(flow_bytes_per_sec) << ',' // Note: Header is now Payload Bytes/s
         << formatJavaLikeDouble(payload_ratio) << ','
         << formatJavaLikeDouble(packet_count_ratio) << ','
         << formatJavaLikeDouble(header_to_total_ratio) << ',';
@@ -110,47 +120,51 @@ bool CSVWriter::writeFlowRow(std::ostream& out, const BasicFlow& flow, const std
         << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.mean) : std::string("0")) << ','
         << (has_pkt_len ? formatJavaLikeDouble(flow.flow_length_stats.stddev()) : std::string("0")) << ',';
 
-    // IAT Profiles - Fwd (5 features)
-    out << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.sum) : std::string("0")) << ','
-        << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.min) : std::string("0")) << ','
+    // IAT Profiles - Fwd
+    /* Removed: << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.sum) : std::string("0")) << ',' */
+    out << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.min) : std::string("0")) << ','
         << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.max) : std::string("0")) << ','
         << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.mean) : std::string("0")) << ','
         << (has_fwd_iat ? formatJavaLikeDouble(flow.forward_iat.stddev()) : std::string("0")) << ',';
 
-    // IAT Profiles - Bwd (5 features)
-    out << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.sum) : std::string("0")) << ','
-        << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.min) : std::string("0")) << ','
+    // IAT Profiles - Bwd
+    /* Removed: << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.sum) : std::string("0")) << ',' */
+    out << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.min) : std::string("0")) << ','
         << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.max) : std::string("0")) << ','
         << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.mean) : std::string("0")) << ','
         << (has_bwd_iat ? formatJavaLikeDouble(flow.backward_iat.stddev()) : std::string("0")) << ',';
 
-    // IAT Profiles - Flow (5 features)
-    out << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.sum) : std::string("0")) << ','
-        << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.min) : std::string("0")) << ','
+    // IAT Profiles - Flow
+    /* Removed: << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.sum) : std::string("0")) << ',' */
+    out << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.min) : std::string("0")) << ','
         << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.max) : std::string("0")) << ','
         << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.mean) : std::string("0")) << ','
         << (has_flow_iat ? formatJavaLikeDouble(flow.flow_iat.stddev()) : std::string("0")) << ',';
 
-    // TCP/IP Mechanics - TCP Flag Counts (8 features)
-    out << flow.syn_flag_count << ','
-        << flow.ack_flag_count << ','
-        << flow.fin_flag_count << ','
-        << flow.rst_flag_count << ','
-        << flow.psh_flag_count << ','
-        << flow.urg_flag_count << ','
-        << flow.cwr_flag_count << ','
-        << flow.ece_flag_count << ',';
+    // TCP/IP Mechanics - TCP Flag Counts
+    /* Removed:
+       out << flow.syn_flag_count << ','
+           << flow.ack_flag_count << ','
+           << flow.fin_flag_count << ','
+           << flow.rst_flag_count << ','
+           << flow.psh_flag_count << ','
+           << flow.urg_flag_count << ','
+           << flow.cwr_flag_count << ','
+           << flow.ece_flag_count << ',';
+    */
 
-    // TCP/IP Mechanics - TCP Flag Rates (8 features)
+    // TCP/IP Mechanics - TCP Flag Rates
+    /* Removed:
+           << formatJavaLikeDouble(flow.cwr_flag_count / tp) << ','
+           << formatJavaLikeDouble(flow.ece_flag_count / tp) << ',';
+    */
     const double tp = static_cast<double>(total_packets);
     out << formatJavaLikeDouble(flow.syn_flag_count / tp) << ','
         << formatJavaLikeDouble(flow.ack_flag_count / tp) << ','
         << formatJavaLikeDouble(flow.fin_flag_count / tp) << ','
         << formatJavaLikeDouble(flow.rst_flag_count / tp) << ','
         << formatJavaLikeDouble(flow.psh_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.urg_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.cwr_flag_count / tp) << ','
-        << formatJavaLikeDouble(flow.ece_flag_count / tp) << ',';
+        << formatJavaLikeDouble(flow.urg_flag_count / tp) << ',';
 
     // TCP/IP Mechanics - Window & Segment (3 features)
     out << flow.init_win_bytes_forward << ','
