@@ -86,12 +86,26 @@ struct udphdr {
 
 #ifndef TH_FIN
 #define TH_FIN  0x01
+#endif
+#ifndef TH_SYN
 #define TH_SYN  0x02
+#endif
+#ifndef TH_RST
 #define TH_RST  0x04
+#endif
+#ifndef TH_PUSH
 #define TH_PUSH 0x08
+#endif
+#ifndef TH_ACK
 #define TH_ACK  0x10
+#endif
+#ifndef TH_URG
 #define TH_URG  0x20
+#endif
+#ifndef TH_ECE
 #define TH_ECE  0x40
+#endif
+#ifndef TH_CWR
 #define TH_CWR  0x80
 #endif
 

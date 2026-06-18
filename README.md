@@ -53,18 +53,25 @@ brew install cmake libpcap
 **Windows:**
 
 To build natively without bloated IDEs:
-1. Install the [Npcap Driver](https://npcap.com/) (you do **not** need the SDK zip).
-2. Install a lightweight compiler, CMake, and the pcap headers via [MSYS2](https://www.msys2.org/). Once installed, open the MSYS2 terminal and run:
+1. Install the [Npcap Driver](https://npcap.com/) AND download the Npcap SDK `.zip` file. Extract the SDK to `C:\npcap-sdk`.
+2. Install a lightweight compiler and CMake via [MSYS2](https://www.msys2.org/). Once installed, open the **MSYS2 MINGW64** terminal and run:
    ```bash
-   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake make mingw-w64-x86_64-libpcap
+   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake make
    ```
+3. **Important:** If you intend to run the compiled `.exe` from a standard Windows PowerShell or Command Prompt rather than the MSYS2 terminal, you must add `C:\msys64\mingw64\bin` to your Windows Environment Variables `Path`. Otherwise, Windows will silently fail to load the required `.dll` files at runtime.
 
 ### Compilation
 
 ```bash
 mkdir build
 cd build
+# On Windows, you MUST tell CMake where you extracted the SDK:
+cmake -G "MinGW Makefiles" .. -DPCAP_INCLUDE_DIR="C:/npcap-sdk/Include" -DPCAP_LIBRARY="C:/npcap-sdk/Lib/x64/wpcap.lib" -DPACKET_LIBRARY="C:/npcap-sdk/Lib/x64/Packet.lib"
+
+# On Linux/macOS, you can just run: 
 cmake ..
+
+# Finally
 cmake --build . -j 4
 ```
 
